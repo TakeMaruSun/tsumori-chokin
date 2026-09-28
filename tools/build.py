@@ -201,7 +201,7 @@ def main() -> None:
     for icon in (ROOT / "icons").glob("*.png"):
         shutil.copy(icon, WEB / "icons" / icon.name)
     shutil.copy(ROOT / "manifest.webmanifest", WEB / "manifest.webmanifest")
-    # 検索エンジンに載せない（家族など URL を知っている人だけで使う想定）
+    # 検索エンジンには載せない（URL を共有された人が使う想定）
     # ただし X（Twitterbot）には、シェアしたときの紹介カード（ページと og.png）を取らせる
     (WEB / "robots.txt").write_text("User-agent: Twitterbot\nAllow: /\n\nUser-agent: *\nDisallow: /\n", encoding="utf-8")
     shutil.copy(ROOT / "og.png", WEB / "og.png")   # 紹介カード。オフライン用の保存対象（assets）には入れない
