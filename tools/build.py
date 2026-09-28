@@ -231,6 +231,11 @@ def main() -> None:
     # 単体版ではホーム画面・オフライン用のファイルは使わない
     one = re.sub(r'\s*<link rel="(?:manifest|apple-touch-icon)"[^>]*>', "", one)
     one = one.replace("<!--\n  外部には一切つながりません。", "<!--\n  フォント: Mochiy Pop One (c) 2020 The Mochiypop Project Authors / Zen Maru Gothic (c) 2021 The Zen Maru Gothic Project Authors\n  いずれも SIL Open Font License 1.1。\n  外部には一切つながりません。", 1)
+    # 1 ファイルだけを渡されても条件を満たすよう、ライセンスの全文を末尾のコメントに入れる
+    # （アプリは MIT、同梱フォントは SIL OFL 1.1。どちらも配布時に著作権表示とライセンス文を付けることが条件）
+    texts = [(ROOT / "LICENSE").read_text(encoding="utf-8")] + [p.read_text(encoding="utf-8") for p in sorted(FONT_OUT.glob("OFL-*.txt"))]
+    licenses = "\n\n".join(t.replace("--", "- -").strip() for t in texts)   # コメントの中に -- は書けない
+    one = one.replace("</html>", f"<!--\n{licenses}\n-->\n</html>", 1)
     one = add_csp(one, {"font-src": "data:", "img-src": "data:"})
     if 'url("fonts/' in one:
         sys.exit("単体版にフォントの外部参照が残っています")
