@@ -9,6 +9,7 @@
 | `index.html` | 編集用のソース（ここを直す）。HTML・CSS・JS がすべて入った 1 ファイル |
 | `tools/build.py` | 公開用ファイルを `dist/` に書き出す |
 | `tools/make_icons.py` | ホーム画面用アイコンを `icons/` に描く |
+| `tools/make_og.py` | SNS でシェアしたときの紹介カード `og.png`（1200×630）を描く。公開版に同梱するが、オフライン用の保存対象には入れない |
 | `tools/sw.js` | オフライン用 Service Worker（版は `version.json` で管理） |
 | `CHANGES.json` | 利用者に見せる更新内容の一覧 |
 | `fonts/src/` | フォントの元データ（SIL OFL 1.1）。`fonts/*.woff2` はビルドが絞り込んで作る |
@@ -48,6 +49,11 @@ python tools/build.py
 - オンラインで開くたびに、ブラウザが `sw.js` に変更がないかを確かめる（登録は `updateViaCache: "none"`、`_headers` で no-cache）。`sw.js` の不具合を直したとき、次に開いた時点で届く。アプリ本体はこれでは変わらない
 - **非常口**：`<公開URL>/?reset` を開くと、アプリの保存分を最新版で取り直してから普通に開き直す（記録は消えない）。電波がないときは案内の画面を出し、保存分は消さない
 - `tools/sw.js` はむやみに変えないこと。中身が変わると、利用者のブラウザが次に開いたときに自動で入れ替える（保存済みのアプリ本体はそのまま）。変えたら、古い版から上がる流れを必ず手元で試す
+
+## 検索エンジンと SNS のカード
+
+- 検索エンジンには載せない（`<meta name="robots" content="noindex, nofollow">`、`robots.txt` で拒否）
+- ただし `robots.txt` で X のロボット（Twitterbot）だけは許可し、URL をシェアしたときに紹介カード（`og.png`）が出るようにしている。OGP のメタタグは `index.html` の head にある
 
 ## 公開（Cloudflare Pages）
 
