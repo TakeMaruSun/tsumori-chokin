@@ -10,7 +10,7 @@
 | `tools/build.py` | 公開用ファイルを `dist/` に書き出す |
 | `tools/make_icons.py` | ホーム画面用アイコンを `icons/` に描く |
 | `tools/make_og.py` | SNS でシェアしたときの紹介カード `og.png`（1200×630）を描く。公開版に同梱するが、オフライン用の保存対象には入れない |
-| `tools/shoot_screens.mjs` | 紹介用のスクショ（見本の記録入り）を撮る。X 用は `promo/x/`、README 用は半分に縮めて `docs/images/` |
+| `tools/shoot_screens.mjs` | 紹介用のスクショ（見本の記録入り）を撮る。README 用は半分に縮めて `docs/images/`（X 投稿用の原寸は `promo/`。git には入れない） |
 | `tools/sw.js` | オフライン用 Service Worker（版は `version.json` で管理） |
 | `CHANGES.json` | 利用者に見せる更新内容の一覧 |
 | `fonts/src/` | フォントの元データ（SIL OFL 1.1）。`fonts/*.woff2` はビルドが絞り込んで作る |
