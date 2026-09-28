@@ -1,0 +1,2589 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FFF4F8" id="themeColor">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="つもり貯金">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
+<!-- 検索エンジンには載せない（URL を知っている人だけが使う想定） -->
+<meta name="format-detection" content="telephone=no">
+<!--
+  外部には一切つながりません。フォント・アイコンはすべて同梱です。
+  つもり貯金 — Copyright (c) 2026 maruhana (@maruhanax6lq) / MIT License（全文は LICENSE）
+  このファイルは編集用のソースです。公開・共有用は tools/build.py で dist/ に書き出します
+  （CSP の付与、フォントの絞り込み、オフライン用ファイルの生成はビルドが行います）。
+-->
+<title>つもり貯金</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='9' y='3' width='14' height='6' rx='2' fill='%23FFE27A' stroke='%234B2A48' stroke-width='2'/%3E%3Cpath d='M10 9h12c4 1 5 4 5 7v9a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4v-9c0-3 1-6 5-7z' fill='%23FF6FA5' stroke='%234B2A48' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<script>
+  // テーマを先に当てて、読み込み時のチラつきを防ぐ
+  try { var t = localStorage.getItem("tsumori-chokin-theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}
+
+  // 推しカラー：選んだ 1 色から、ライト用（--o-*）とダーク用（--od-*）の配色一式を作って :root に入れる。
+  // 標準のピンク（または不正な値）のときは何も入れず、CSS に書いた元の配色のまま
+  window.oshiPaint = function (hex) {
+    var st = document.documentElement.style, i;
+    var keys = ["bg", "dot", "line", "acc", "deep", "ink", "soft", "on", "milk1", "mini", "lsh"];
+    var dkeys = ["bg", "dot", "card", "field", "line", "glass", "ink", "soft", "edge", "acc", "deep", "on", "milk1"];
+    for (i = 0; i < keys.length; i++) st.removeProperty("--o-" + keys[i]);
+    for (i = 0; i < dkeys.length; i++) st.removeProperty("--od-" + dkeys[i]);
+    if (!/^#[0-9a-f]{6}$/i.test(hex || "") || hex.toUpperCase() === "#FF6FA5") return;
+
+    var r = parseInt(hex.slice(1, 3), 16) / 255, g = parseInt(hex.slice(3, 5), 16) / 255, b = parseInt(hex.slice(5, 7), 16) / 255;
+    var mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn, h = 0, s = 0;
+    if (d) {
+      s = d / (1 - Math.abs(2 * l - 1));
+      h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      h = (h * 60 + 360) % 360;
+    }
+    var sf = Math.min(1, s / 0.6);            // くすんだ色・白黒のときは、周りの色味も控えめにする
+    function hsl(H, S, L) {
+      H = ((H % 360) + 360) % 360; S = Math.max(0, Math.min(1, S)); L = Math.max(0, Math.min(1, L));
+      var c = (1 - Math.abs(2 * L - 1)) * S, x = c * (1 - Math.abs((H / 60) % 2 - 1)), m = L - c / 2, v;
+      v = H < 60 ? [c, x, 0] : H < 120 ? [x, c, 0] : H < 180 ? [0, c, x] : H < 240 ? [0, x, c] : H < 300 ? [x, 0, c] : [c, 0, x];
+      return "#" + v.map(function (n) { return ("0" + Math.round((n + m) * 255).toString(16)).slice(-2); }).join("").toUpperCase();
+    }
+    function lum(x) {
+      var c = [1, 3, 5].map(function (j) { var n = parseInt(x.slice(j, j + 2), 16) / 255; return n <= 0.03928 ? n / 12.92 : Math.pow((n + 0.055) / 1.055, 2.4); });
+      return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    }
+    function contrast(x, y) { var a = lum(x), z = lum(y); return (Math.max(a, z) + 0.05) / (Math.min(a, z) + 0.05); }
+    // 見えるまで暗く（明るく）する
+    function fit(H, S, L, against, need, step) {
+      var c = hsl(H, S, L);
+      while (contrast(c, against) < need && L > 0 && L < 1) { L += step; c = hsl(H, S, L); }
+      return [c, L];
+    }
+
+    // ---- ライト ----
+    var acc = fit(h, s, l, "#FFFFFF", 1.7, -0.02), ink = hsl(h - 30, 0.28 * sf, 0.23);
+    var o = {
+      bg: hsl(h, s, 0.978), dot: hsl(h, s, 0.925), line: hsl(h, s * 0.74, 0.878),
+      acc: acc[0], deep: fit(h, Math.min(s, 0.66), 0.56, "#FFFFFF", 4, -0.02)[0],
+      ink: ink, soft: hsl(h - 27, 0.14 * sf, 0.48),
+      milk1: hsl(h, s, Math.min(0.9, acc[1] + 0.09)), mini: hsl(h, s, Math.min(0.88, acc[1] + 0.03))
+    };
+    o.on = contrast("#FFFFFF", o.acc) >= 2.3 ? "#FFFFFF" : ink;
+    if (h >= 30 && h <= 80 && s > 0.3) o.lsh = "var(--ramune)";   // 黄色系はロゴの影（レモン色）と同化するので水色に
+    // ---- ダーク ----
+    var dbg = hsl(h - 30, 0.25 * sf, 0.10);
+    var dacc = fit(h, s, Math.max(l, 0.66), dbg, 5, 0.02);
+    var od = {
+      bg: dbg, dot: hsl(h - 30, 0.23 * sf, 0.163), card: hsl(h - 30, 0.25 * sf, 0.147), field: hsl(h - 30, 0.25 * sf, 0.12),
+      line: hsl(h - 30, 0.22 * sf, 0.257), glass: hsl(h - 30, 0.23 * sf, 0.184),
+      ink: hsl(h - 17, 0.52 * sf, 0.943), soft: hsl(h - 23, 0.2 * sf, 0.71), edge: hsl(h - 16, 0.44 * sf, 0.859),
+      acc: dacc[0], deep: hsl(h, s, Math.min(0.9, dacc[1] + 0.07)), milk1: hsl(h, s, Math.min(0.92, dacc[1] + 0.07))
+    };
+    od.on = contrast("#FFFFFF", od.acc) >= 2.3 ? "#FFFFFF" : dbg;
+    for (i in o) st.setProperty("--o-" + i, o[i]);
+    for (i in od) st.setProperty("--od-" + i, od[i]);
+  };
+  try { window.oshiPaint(localStorage.getItem("tsumori-chokin-oshi")); } catch (e) {}
+</script>
+<style>
+  /* =========================================================
+     フォント（同梱。SIL Open Font License 1.1 — fonts/OFL-*.txt）
+     ========================================================= */
+  @font-face { font-family: "Mochiy Pop One"; font-weight: 400; font-display: block; src: url("fonts/MochiyPopOne.woff2") format("woff2"); }
+  @font-face { font-family: "Zen Maru Gothic"; font-weight: 500; font-display: block; src: url("fonts/ZenMaruGothic-Medium.woff2") format("woff2"); }
+  @font-face { font-family: "Zen Maru Gothic"; font-weight: 700; font-display: block; src: url("fonts/ZenMaruGothic-Bold.woff2") format("woff2"); }
+
+  /* =========================================================
+     カラートークン（ライト / ダーク）
+     ========================================================= */
+  :root {
+    color-scheme: light;
+    /* --o-* / --od-* は推しカラーを選んだときに JS が入れる（なければ標準のピンク） */
+    --bg: var(--o-bg, #FFF4F8);           --dot: var(--o-dot, #FFD9E7);
+    --card: #FFFFFF;                      --field: var(--o-bg, #FFF4F8);
+    --ink: var(--o-ink, #4B2A48);         --ink-soft: var(--o-soft, #8C6A86);
+    --edge: var(--o-ink, #4B2A48);        --drop: var(--o-ink, #4B2A48);
+    --line: var(--o-line, #F7C9DA);
+    --accent: var(--o-acc, #FF6FA5);      --accent-deep: var(--o-deep, #D9437F);
+    --on-accent: var(--o-on, #FFFFFF);
+    --milk-top: var(--o-milk1, #FF9CC3);  --milk-bot: var(--o-acc, #FF6FA5);
+    --mini: var(--o-mini, #FF7FAF);
+    --lemon: #FFE27A;    --lemon-soft: #FFF7D1;  --on-lemon: #4B2A48;
+    --ramune: #9CCBFF;   --sat: #4F86C6;
+    --glass: #FFFFFF;
+    --tint-mix: 100%;
+    --tab-h: 64px;
+    --pop: "Mochiy Pop One", "Zen Maru Gothic", sans-serif;
+    --maru: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Yu Gothic", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: var(--od-bg, #1C1320);       --dot: var(--od-dot, #2E2033);
+      --card: var(--od-card, #2A1C2F);   --field: var(--od-field, #221726);
+      --ink: var(--od-ink, #F8E9F3);     --ink-soft: var(--od-soft, #C4A6BD);
+      --edge: var(--od-edge, #EBCBE0);   --drop: #0B060D;
+      --line: var(--od-line, #4A3350);
+      --accent: var(--od-acc, #FF79AE);  --accent-deep: var(--od-deep, #FF9CC3);
+      --on-accent: var(--od-on, #FFFFFF);
+      --milk-top: var(--od-milk1, #FF9CC3); --milk-bot: var(--od-acc, #FF6FA5);
+      --mini: var(--od-acc, #FF7FAF);
+      --lemon-soft: #3A3120;
+      --sat: #8DB8EE;
+      --glass: var(--od-glass, #33243A);
+      --tint-mix: 28%;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: var(--od-bg, #1C1320);     --dot: var(--od-dot, #2E2033);
+    --card: var(--od-card, #2A1C2F);   --field: var(--od-field, #221726);
+    --ink: var(--od-ink, #F8E9F3);     --ink-soft: var(--od-soft, #C4A6BD);
+    --edge: var(--od-edge, #EBCBE0);   --drop: #0B060D;
+    --line: var(--od-line, #4A3350);
+    --accent: var(--od-acc, #FF79AE);  --accent-deep: var(--od-deep, #FF9CC3);
+    --on-accent: var(--od-on, #FFFFFF);
+    --milk-top: var(--od-milk1, #FF9CC3); --milk-bot: var(--od-acc, #FF6FA5);
+    --mini: var(--od-acc, #FF7FAF);
+    --lemon-soft: #3A3120;
+    --sat: #8DB8EE;
+    --glass: var(--od-glass, #33243A);
+    --tint-mix: 28%;
+  }
+
+  /* =========================================================
+     ベース
+     ========================================================= */
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; }
+  body {
+    background-color: var(--bg);
+    background-image: radial-gradient(var(--dot) 1.6px, transparent 1.7px);
+    background-size: 22px 22px;
+    color: var(--ink);
+    font-family: var(--maru);
+    font-weight: 500; font-size: 15px; line-height: 1.6;
+    min-height: 100vh;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:disabled { opacity: .35; cursor: default; }
+  :focus-visible { outline: 3px solid var(--ramune); outline-offset: 2px; }
+  h2, h3 { font-family: var(--pop); font-weight: 400; }
+
+  .wrap {
+    max-width: 480px; margin: 0 auto;
+    padding: 16px 16px calc(var(--tab-h) + 48px + env(safe-area-inset-bottom));
+  }
+
+  /* ---------- ヘッダー ---------- */
+  .logo {
+    font-family: var(--pop); font-weight: 400; text-align: center;
+    font-size: 28px; margin: 0 0 2px; color: var(--accent);
+    letter-spacing: .04em; text-shadow: 3px 3px 0 var(--o-lsh, var(--lemon));
+  }
+  .tagline { text-align: center; margin: 0 0 8px; font-size: 13px; color: var(--ink-soft); }
+  .view-title { font-size: 22px; margin: 14px 0 12px; }
+
+  /* =========================================================
+     ホーム：貯金ビン
+     ========================================================= */
+  .hero { text-align: center; touch-action: pan-y; }
+  /* 入れもの（用途）の切り替えタブ */
+  .pots {
+    position: relative; display: flex; gap: 6px; overflow-x: auto; justify-content: safe center;
+    padding: 2px 2px 6px; margin: 0 -2px 2px; scrollbar-width: none;
+  }
+  .pots::-webkit-scrollbar { display: none; }
+  .pot-tab {
+    flex: none; border: 2px solid var(--line); background: var(--card); color: var(--ink-soft);
+    border-radius: 999px; padding: 4px 12px; font-size: 13px; font-weight: 700; white-space: nowrap;
+    max-width: 11em; overflow: hidden; text-overflow: ellipsis;
+  }
+  .pot-tab[aria-selected="true"] { background: var(--accent); border-color: var(--edge); color: var(--on-accent); }
+  .pot-tab.add { border-style: dashed; max-width: none; }
+  .pot-pick { margin-bottom: 0; }
+  .jar .glass   { fill: var(--glass); }
+  .jar .outline { fill: none; stroke: var(--edge); stroke-width: 4; stroke-linejoin: round; }
+  .jar .lid     { fill: var(--lemon); stroke: var(--edge); stroke-width: 4; }
+  .jar .slot    { fill: var(--edge); }
+  .jar .shine   { fill: none; stroke: #fff; stroke-width: 6; stroke-linecap: round; opacity: .85; }
+  .jar .tag     { fill: var(--card); stroke: var(--edge); stroke-width: 3; }
+  .jar .tag-text{ fill: var(--ink); font-family: var(--pop); font-size: 17px; }
+  .liquid { transform: translateY(176px); transition: transform 1.1s cubic-bezier(.3,1.4,.5,1); }
+  .wave { animation: wave 5s linear infinite; }
+  @keyframes wave { to { transform: translateX(-120px); } }
+  /* ビン・ガチャ共通の演出 */
+  .vessel { position: relative; width: 200px; margin: 4px auto 0; }
+  .vessel > svg { display: block; width: 100%; height: auto; overflow: visible; transform-origin: 50% 100%; }
+  .vessel.full > svg { animation: glow .9s ease-in-out 2; }
+  @keyframes glow { 50% { filter: drop-shadow(0 0 16px var(--lemon)); } }
+  .vessel.bump > svg { animation: bump .5s cubic-bezier(.3,1.6,.5,1); }
+  @keyframes bump { 30% { transform: scale(1.05,.95); } 65% { transform: scale(.98,1.03); } }
+  .vessel.swap > svg { animation: swap .6s cubic-bezier(.3,1.4,.5,1); }
+  @keyframes swap { from { transform: translateY(-28px) scale(.85); opacity: 0; } }
+
+  /* =========================================================
+     ホーム：ガチャガチャ
+     ========================================================= */
+  .gacha .dome    { fill: var(--glass); }
+  .gacha .dome-ol { fill: none; stroke: var(--edge); stroke-width: 4; }
+  .gacha .shine   { fill: none; stroke: #fff; stroke-width: 6; stroke-linecap: round; opacity: .85; }
+  .gacha .cap-top { fill: var(--lemon); stroke: var(--edge); stroke-width: 4; }
+  .gacha .body    { fill: var(--accent); stroke: var(--edge); stroke-width: 4; stroke-linejoin: round; }
+  .gacha .foot    { fill: var(--edge); }
+  .gacha .tag     { fill: var(--card); stroke: var(--edge); stroke-width: 3; }
+  .gacha .tag-text{ fill: var(--ink); font-family: var(--pop); font-size: 16px; }
+  .gacha .dark    { fill: var(--edge); }
+  .gacha .knob-c  { fill: var(--lemon); stroke: var(--edge); stroke-width: 4; }
+  .knob { transform-box: fill-box; transform-origin: center; }
+  .knob.turn { animation: turn .55s cubic-bezier(.4,0,.3,1); }
+  @keyframes turn { to { transform: rotate(360deg); } }
+  /* カプセル：位置は JS が transform で入れる。ずれるときはふわっと動く */
+  .capsule { transition: transform .9s cubic-bezier(.3,1.25,.5,1); }
+  .capsule.instant { transition: none; }
+  .capsule .c-top { stroke: none; }
+  .capsule .c-bot { fill: #fff; }
+  .capsule .c-ol  { fill: none; stroke: #4B2A48; stroke-width: 2; }
+  .capsule .c-eq  { fill: none; stroke: #4B2A48; stroke-width: 1.6; }
+  .capsule .c-sh  { fill: #fff; opacity: .7; }
+  .mini .g { fill: var(--glass); stroke: var(--edge); stroke-width: 2; }
+  .mini .d { fill: var(--edge); }
+
+  /* ---------- 満タンのビンを並べる棚 ---------- */
+  .shelf { display: flex; flex-direction: column; align-items: center; margin: 12px auto 0; max-width: 360px; }
+  .shelf-rows { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+  .shelf-row {
+    display: flex; flex-wrap: nowrap; justify-content: center; align-items: flex-end;
+    gap: 6px 6px; padding: 0 12px 3px; min-width: 150px;
+    border-bottom: 5px solid var(--edge); border-radius: 0 0 4px 4px;
+    position: relative;
+  }
+  .shelf-row::before, .shelf-row::after {
+    content: ""; position: absolute; bottom: -13px; width: 5px; height: 9px;
+    background: var(--edge); border-radius: 0 0 3px 3px;
+  }
+  .shelf-row::before { left: 14px; } .shelf-row::after { right: 14px; }
+  .mini-wrap { display: block; line-height: 0; }
+  .mini { width: 28px; height: 34px; display: block; }
+  .mini .l { fill: var(--lemon); stroke: var(--edge); stroke-width: 2; }
+  .mini .b { fill: var(--mini); stroke: var(--edge); stroke-width: 2; stroke-linejoin: round; }
+  .mini .s { fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; opacity: .85; }
+  .mini .h { fill: #fff; opacity: .8; }
+  .mini-wrap.pop { animation: pop .7s cubic-bezier(.3,1.7,.5,1); }
+  @keyframes pop { 0% { transform: translate(0, -60px) scale(.3); opacity: 0; } 60% { opacity: 1; } }
+  .shelf-more { font-family: var(--pop); font-size: 15px; color: var(--accent-deep); align-self: center; padding: 0 2px; }
+  .shelf-cap { font-size: 12.5px; font-weight: 700; color: var(--ink-soft); margin: 14px 0 0; }
+
+  .coin {
+    position: absolute; left: 50%; top: -10px; width: 34px; height: 34px;
+    margin-left: -17px; border-radius: 50%;
+    background: var(--lemon); border: 3px solid #4B2A48; color: #4B2A48;
+    font-family: var(--pop); font-size: 15px; line-height: 28px; text-align: center;
+    animation: drop .75s cubic-bezier(.5,0,.8,.4) forwards; pointer-events: none;
+  }
+  @keyframes drop {
+    0%   { transform: translateY(-40px) rotate(-20deg); opacity: 0; }
+    15%  { opacity: 1; }
+    100% { transform: translateY(var(--fall, 160px)) rotate(200deg) scale(.7); opacity: 0; }
+  }
+
+  .total {
+    font-family: var(--pop); font-weight: 400;
+    font-size: 44px; line-height: 1.1; margin: 10px 0 2px;
+    font-variant-numeric: tabular-nums; word-break: break-all;
+  }
+  .total small { font-size: 20px; margin-left: 4px; }
+  .lifetime { margin: 2px 0 0; font-size: 12px; color: var(--ink-soft); }
+
+  .meta { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 10px; }
+  .chip {
+    background: var(--card); border: 2px solid var(--line); border-radius: 999px;
+    padding: 2px 10px; font-size: 12.5px; font-weight: 700;
+  }
+  .chip.hot { background: var(--lemon-soft); border-color: var(--lemon); }
+
+  /* =========================================================
+     入力パネル
+     ========================================================= */
+  .panel {
+    background: var(--card); border: 2.5px solid var(--edge);
+    border-radius: 22px; padding: 18px 16px 14px; margin-top: 22px;
+    box-shadow: 5px 5px 0 var(--accent);
+    scroll-margin-top: 12px;
+  }
+  .panel h2 { font-size: 18px; margin: 0 0 12px; }
+
+  .cats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .scroller { display: flex; gap: 6px; overflow-x: auto; padding: 2px 2px 6px; margin: 0 -2px 6px; scrollbar-width: none; }
+  .scroller::-webkit-scrollbar { display: none; }
+  .scroller .cat { flex: none; }
+  .cat {
+    border: 2px solid var(--line);
+    background: var(--card);
+    background: color-mix(in srgb, var(--tint, var(--card)) calc(var(--tint-mix) * .5), var(--card));
+    border-radius: 999px; padding: 5px 11px; font-size: 13px; font-weight: 700;
+    transition: transform .12s, background .15s;
+    white-space: nowrap;
+  }
+  .cat:active { transform: scale(.94); }
+  .cat[aria-pressed="true"] { background: var(--edge); border-color: var(--edge); color: var(--card); }
+
+  label, .lbl { display: block; font-size: 13px; font-weight: 700; margin: 0 0 4px; }
+  .field { margin-bottom: 12px; }
+  input[type=text], input[type=number], input[type=date], input[type=search], textarea {
+    width: 100%; font-size: 16px; padding: 10px 12px;
+    border-radius: 14px; border: 2px solid var(--line); background: var(--field);
+  }
+  textarea { resize: vertical; min-height: 64px; line-height: 1.5; }
+  input:focus, textarea:focus { outline: none; border-color: var(--accent); background: var(--card); }
+  input::placeholder, textarea::placeholder { color: var(--ink-soft); opacity: .7; }
+  .row { display: flex; gap: 10px; }
+  .row > .field { flex: 1; min-width: 0; }
+  .row > .field.date { flex: .9; }
+  .yen { position: relative; }
+  .yen input { padding-right: 32px; font-variant-numeric: tabular-nums; }
+  .yen::after {
+    content: "円"; position: absolute; right: 11px; top: 50%;
+    transform: translateY(-50%); font-weight: 700; color: var(--ink-soft); pointer-events: none;
+  }
+  .quick { display: flex; gap: 6px; margin: -4px 0 14px; }
+  .quick button {
+    flex: 1; border: none; border-radius: 10px; padding: 6px 0;
+    background: var(--lemon-soft); font-size: 12.5px; font-weight: 700;
+    transition: transform .1s;
+  }
+  .quick button:active { background: var(--lemon); color: var(--on-lemon); transform: scale(.95); }
+  .quick .clear { flex: .8; background: var(--field); color: var(--ink-soft); }
+
+  .date-row { display: flex; gap: 6px; }
+  .date-row input { flex: 1; min-width: 0; }
+  .dchip {
+    flex: none; border: 2px solid var(--line); background: var(--card);
+    border-radius: 12px; padding: 0 12px; font-weight: 700; font-size: 13px;
+  }
+  .dchip[aria-pressed="true"] { border-color: var(--edge); background: var(--lemon); color: var(--on-lemon); }
+
+  .memo-toggle {
+    border: none; background: none; padding: 0; margin: -2px 0 12px;
+    color: var(--ink-soft); font-size: 13px; font-weight: 700;
+    text-decoration: underline dotted; text-underline-offset: 3px;
+  }
+
+  .save {
+    width: 100%; border: 2.5px solid var(--edge); border-radius: 16px;
+    padding: 13px; background: var(--accent); color: var(--on-accent);
+    font-family: var(--pop); font-size: 17px;
+    box-shadow: 0 5px 0 var(--drop);
+    transition: transform .08s, box-shadow .08s;
+  }
+  .save:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--drop); }
+  .error { color: var(--accent-deep); font-size: 13px; font-weight: 700; min-height: 1.4em; margin: 8px 0 0; }
+
+  /* =========================================================
+     見出し・ボタン類
+     ========================================================= */
+  .sec-h { display: flex; justify-content: space-between; align-items: baseline; margin: 28px 0 10px; }
+  .sec-h h2 { font-size: 18px; margin: 0; }
+  .link {
+    border: none; background: none; padding: 0; font-weight: 700; font-size: 13px;
+    color: var(--accent-deep);
+  }
+  .btn {
+    border: 2px solid var(--edge); background: var(--card); color: var(--ink);
+    border-radius: 12px; padding: 8px 14px; font-weight: 700; font-size: 13.5px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+    transition: transform .1s; cursor: pointer;
+  }
+  .btn:active { transform: scale(.96); }
+  .btn.sm { padding: 4px 10px; font-size: 12.5px; border-radius: 10px; }
+  .btn.primary { background: var(--accent); color: var(--on-accent); }
+  .btn.lemon { background: var(--lemon); color: var(--on-lemon); }
+  .btn.danger { color: var(--accent-deep); border-color: var(--accent-deep); }
+  .btn.grow { flex: 1; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .note { font-size: 12.5px; color: var(--ink-soft); margin: 0 0 10px; }
+  .note.upd-msg { margin: 10px 0 0; min-height: 1.4em; }
+  .upd-notes { background: var(--field); border: 2px solid var(--line); border-radius: 12px; padding: 8px 12px; margin: 8px 0 0; font-size: 13px; }
+  .upd-notes h4 { font-size: 12.5px; margin: 4px 0 2px; color: var(--ink-soft); }
+  .upd-notes ul { margin: 0 0 4px; padding-left: 1.2em; }
+  .upd-notes li { margin: 2px 0; }
+  .note.install { background: var(--lemon-soft); border-radius: 12px; padding: 10px 12px; color: var(--ink); line-height: 1.7; }
+
+  .box {
+    background: var(--card); border: 2.5px solid var(--edge);
+    border-radius: 20px; padding: 16px; margin-bottom: 16px;
+    box-shadow: 4px 4px 0 var(--accent);
+    --notch: var(--card);
+  }
+  .box h3 { font-size: 16px; margin: 0 0 10px; }
+
+  .empty {
+    text-align: center; padding: 22px 12px; border: 2.5px dashed var(--line);
+    border-radius: 16px; color: var(--ink-soft); font-size: 14px; list-style: none;
+  }
+  .empty.small { padding: 12px; font-size: 13px; }
+
+  /* =========================================================
+     チケット（記録）
+     ========================================================= */
+  .tickets { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+  .ticket { position: relative; --notch-bg: var(--notch, var(--bg)); }
+  .ticket.new { animation: slip .45s cubic-bezier(.3,1.5,.6,1); }
+  @keyframes slip { from { transform: translateY(-8px) scale(.97); opacity: 0; } }
+  .ticket-btn {
+    width: 100%; display: grid; grid-template-columns: 56px 1fr auto; align-items: stretch;
+    text-align: left; padding: 0;
+    background: var(--card); border: 2px solid var(--edge); border-radius: 14px;
+    transition: transform .12s;
+  }
+  .ticket-btn:hover { transform: translateY(-1px); }
+  .ticket-btn:active { transform: scale(.985); }
+  .stub {
+    display: grid; place-items: center; font-size: 24px;
+    border-right: 2.5px dashed var(--edge); border-radius: 12px 0 0 12px;
+    background: var(--tint);
+    background: color-mix(in srgb, var(--tint) var(--tint-mix), var(--card));
+  }
+  .ticket::before, .ticket::after {
+    content: ""; position: absolute; left: 48px; width: 16px; height: 16px; z-index: 1;
+    background: var(--notch-bg); border: 2px solid var(--edge); border-radius: 50%; pointer-events: none;
+  }
+  .ticket::before { top: -7px; clip-path: inset(50% 0 0 0); }
+  .ticket::after  { bottom: -7px; clip-path: inset(0 0 50% 0); }
+  .t-body { padding: 9px 12px; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+  .t-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .t-meta { font-size: 12px; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .t-memo { font-size: 12px; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .t-memo::before { content: "✎ "; }
+  .t-amount {
+    align-self: center; padding: 0 12px 0 4px;
+    font-family: var(--pop); font-size: 16px; color: var(--accent-deep); white-space: nowrap;
+  }
+  .group-h {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 13px; font-weight: 700; color: var(--ink-soft); padding: 8px 4px 0;
+  }
+  .group-h span:first-child { font-family: var(--pop); font-weight: 400; color: var(--ink); font-size: 14px; }
+
+  .more {
+    display: block; margin: 14px auto 0; border: 2px solid var(--edge); background: var(--card);
+    border-radius: 999px; padding: 6px 18px; font-weight: 700; font-size: 13px;
+  }
+
+  /* ---------- きろく：検索 ---------- */
+  .search { position: relative; margin-bottom: 10px; }
+  .search input { padding-left: 38px; }
+  .search::before {
+    content: ""; position: absolute; left: 14px; top: 50%; width: 12px; height: 12px;
+    border: 2.5px solid var(--ink-soft); border-radius: 50%; transform: translate(0, -60%);
+  }
+  .search::after {
+    content: ""; position: absolute; left: 25px; top: 55%; width: 7px; height: 2.5px;
+    background: var(--ink-soft); border-radius: 2px; transform: rotate(45deg);
+  }
+  .h-sum { font-size: 13px; font-weight: 700; color: var(--ink-soft); margin: 0 0 8px; min-height: 1.4em; }
+
+  /* =========================================================
+     まとめ
+     ========================================================= */
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .card {
+    background: var(--card); border: 2px solid var(--line); border-radius: 16px;
+    padding: 10px 14px; min-width: 0; display: flex; flex-direction: column;
+  }
+  .c-l { font-size: 12px; font-weight: 700; color: var(--ink-soft); }
+  .c-v { font-family: var(--pop); font-weight: 400; font-size: 19px; color: var(--accent-deep); line-height: 1.35; word-break: break-all; }
+  .c-s { font-size: 11.5px; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .bars { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; align-items: end; }
+  .bar { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; height: 150px; }
+  .bar b { font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .bar i {
+    display: block; width: 100%; max-width: 34px;
+    border-radius: 8px 8px 4px 4px; background: var(--line); border: 2px solid var(--edge);
+    transition: height .7s cubic-bezier(.3,1.3,.5,1);
+  }
+  .bar.now i { background: var(--accent); }
+  .bar span { font-size: 11px; color: var(--ink-soft); font-weight: 700; }
+
+  .catrow { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 10px; align-items: center; margin: 10px 0; font-size: 13.5px; }
+  .catrow .cr-l { font-weight: 700; }
+  .catrow .cr-v { font-weight: 700; text-align: right; }
+  .catrow .cr-v small { color: var(--ink-soft); margin-left: 4px; font-weight: 500; }
+  .meter { grid-column: 1 / -1; height: 10px; background: var(--field); border-radius: 99px; overflow: hidden; border: 1.5px solid var(--line); }
+  .meter i { display: block; height: 100%; border-radius: 99px; background: var(--accent); transition: width .7s ease; }
+
+  .cal-head { display: flex; justify-content: space-between; align-items: center; }
+  .cal-head h3 { margin: 0; }
+  .cal-nav {
+    border: 2px solid var(--edge); background: var(--card); border-radius: 10px;
+    width: 34px; height: 34px; font-weight: 700; font-size: 18px; line-height: 1; padding: 0;
+  }
+  .cal-sum { text-align: center; font-size: 13px; font-weight: 700; color: var(--ink-soft); margin: 4px 0 0; }
+  .cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; margin: 10px 0; }
+  .dow { text-align: center; font-size: 11px; color: var(--ink-soft); font-weight: 700; }
+  .dow.sun { color: var(--accent-deep); } .dow.sat { color: var(--sat); }
+  .day {
+    aspect-ratio: 1 / 1.15; border: 1.5px solid var(--line); border-radius: 10px;
+    background: var(--field); padding: 2px 0; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    font-size: 11px; line-height: 1.2; overflow: hidden;
+  }
+  .day .n { font-weight: 700; opacity: .75; }
+  .day .e { font-size: 16px; line-height: 1.25; }
+  .day .a { font-size: 9.5px; font-weight: 700; color: var(--accent-deep); white-space: nowrap; }
+  .day.has { background: var(--card); border-color: var(--accent); }
+  .day.today { box-shadow: inset 0 0 0 2px var(--lemon); }
+  .day.sel { border: 2.5px solid var(--edge); }
+  .day-list { margin-top: 4px; }
+  .day-add { display: block; margin: 10px auto 0; }
+
+  .badges { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .badge {
+    text-align: center; border: 2px solid var(--line); border-radius: 14px;
+    padding: 8px 2px 6px; font-size: 11px; font-weight: 700; background: var(--field);
+  }
+  .badge .i { font-size: 22px; display: block; line-height: 1.3; }
+  .badge.on { border-color: var(--edge); background: var(--lemon-soft); }
+  .badge.off { opacity: .5; }
+  .achieved { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 6px; }
+  .achieved li {
+    display: flex; gap: 8px; align-items: baseline; font-size: 13px;
+    border-top: 2px dotted var(--line); padding-top: 6px;
+  }
+  .achieved b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .achieved small { color: var(--ink-soft); }
+
+  /* =========================================================
+     せってい
+     ========================================================= */
+  .check { display: flex; gap: 8px; align-items: center; font-weight: 700; font-size: 13.5px; margin: 0 0 4px; cursor: pointer; }
+  .check input { width: 18px; height: 18px; accent-color: var(--accent); }
+  .cat-list { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 8px; }
+  .cat-row { display: flex; align-items: center; gap: 10px; }
+  .cr-e {
+    width: 38px; height: 38px; flex: none; display: grid; place-items: center; font-size: 20px;
+    border-radius: 12px; border: 2px solid var(--edge);
+    background: var(--tint); background: color-mix(in srgb, var(--tint) var(--tint-mix), var(--card));
+  }
+  .cr-b { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.35; }
+  .cr-b b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cr-b small { color: var(--ink-soft); font-size: 12px; }
+  .cr-n { font-size: 12px; color: var(--ink-soft); font-weight: 700; }
+
+  .seg.two { grid-template-columns: repeat(2, 1fr); margin-bottom: 14px; }
+  .pot-row { display: grid; gap: 6px; }
+  .seg.two.sm { margin-bottom: 0; border-radius: 12px; }
+  .seg.sm button { padding: 5px 0; font-size: 12.5px; }
+  .seg { display: grid; grid-template-columns: repeat(3, 1fr); border: 2px solid var(--edge); border-radius: 14px; overflow: hidden; }
+  .seg button { border: none; background: var(--card); padding: 8px 0; font-weight: 700; font-size: 13.5px; }
+  .seg button + button { border-left: 2px solid var(--edge); }
+  .seg button[aria-checked="true"] { background: var(--edge); color: var(--card); }
+  .filebtn { position: relative; }
+  .filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .filebtn:focus-within { outline: 3px solid var(--ramune); outline-offset: 2px; }
+  .sep { border: none; border-top: 2px dotted var(--line); margin: 16px 0; }
+  .credit { text-align: center; font-size: 12px; color: var(--ink-soft); margin-top: 20px; }
+
+  /* =========================================================
+     タブバー
+     ========================================================= */
+  .tabbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+    display: flex; justify-content: center;
+    padding: 0 12px calc(10px + env(safe-area-inset-bottom));
+    pointer-events: none;
+  }
+  .tabbar-in {
+    pointer-events: auto; width: 100%; max-width: 456px; height: var(--tab-h);
+    display: grid; grid-template-columns: repeat(5, 1fr); align-items: center;
+    background: var(--card); border: 2.5px solid var(--edge); border-radius: 22px;
+    box-shadow: 0 4px 0 var(--drop); padding: 0 4px;
+  }
+  .tab {
+    border: none; background: none; height: 100%; padding: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+    font-size: 10.5px; font-weight: 700; color: var(--ink-soft);
+  }
+  .tab svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; transition: transform .2s; }
+  .tab[aria-current="page"] { color: var(--accent-deep); }
+  .tab[aria-current="page"] svg { transform: translateY(-2px) scale(1.08); }
+  .tab-add {
+    justify-self: center; width: 58px; height: 58px; border-radius: 50%; padding: 0;
+    border: 2.5px solid var(--edge); background: var(--accent); color: var(--on-accent);
+    display: grid; place-items: center;
+    box-shadow: 0 4px 0 var(--drop); transform: translateY(-16px);
+    transition: transform .08s, box-shadow .08s;
+  }
+  .tab-add svg { width: 26px; height: 26px; stroke: currentColor; stroke-width: 3.2; stroke-linecap: round; fill: none; }
+  .tab-add:active { transform: translateY(-12px); box-shadow: 0 0 0 var(--drop); }
+
+  /* =========================================================
+     ボトムシート
+     ========================================================= */
+  dialog.sheet {
+    padding: 0; margin: auto auto 0; width: 100%; max-width: 480px; max-height: 92vh;
+    background: var(--card); color: var(--ink);
+    border: 2.5px solid var(--edge); border-bottom: none; border-radius: 24px 24px 0 0;
+    overflow: hidden;
+  }
+  dialog.sheet::backdrop { background: rgb(40 15 35 / .45); }
+  dialog.sheet[open] { animation: up .3s cubic-bezier(.3,1.2,.5,1); }
+  @keyframes up { from { transform: translateY(40px); opacity: 0; } }
+  .sheet-in { padding: 10px 18px calc(22px + env(safe-area-inset-bottom)); overflow-y: auto; max-height: 92vh; --notch: var(--card); }
+  .grab { width: 44px; height: 5px; border-radius: 9px; background: var(--line); margin: 0 auto 8px; }
+  .sheet-h { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .sheet-h h2 { font-size: 18px; margin: 0; }
+  .x {
+    border: 2px solid var(--line); background: var(--field); border-radius: 50%;
+    width: 34px; height: 34px; font-size: 18px; line-height: 1; padding: 0; color: var(--ink-soft);
+  }
+  .sheet-actions { display: flex; gap: 8px; margin-top: 14px; }
+  .emoji-f { flex: 0 0 84px !important; }
+  .emoji-f input { text-align: center; font-size: 20px; padding: 6px; }
+  .emoji-pick { display: flex; flex-wrap: wrap; gap: 4px; margin: -4px 0 12px; }
+  .emoji-pick button {
+    border: 2px solid transparent; background: var(--field); border-radius: 10px;
+    width: 38px; height: 38px; font-size: 19px; padding: 0;
+  }
+  .emoji-pick button[aria-pressed="true"] { border-color: var(--edge); }
+  .emoji-pick button.none { width: auto; padding: 0 10px; font-size: 13px; font-weight: 700; }
+  .emoji-f input::placeholder { font-size: 14px; }
+  .swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+  .sw { width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--line); padding: 0; }
+  .sw[aria-pressed="true"] { border: 3px solid var(--edge); transform: scale(1.1); }
+  .milk-top { stop-color: var(--milk-top); } .milk-bot { stop-color: var(--milk-bot); }
+  /* 推しカラー */
+  .oshi-pick { display: grid; grid-template-columns: repeat(5, 36px); gap: 10px 14px; margin: 2px 0 8px; }
+  .oshi-pick .sw { width: 36px; height: 36px; }
+  .oshi-custom {
+    position: relative; overflow: hidden; display: grid; place-items: center;
+    background: conic-gradient(#FF5A5F, #FFB23F, #FFE04A, #6BD36B, #4FC3F7, #5B7BEA, #B173E8, #FF5A5F);
+  }
+  .oshi-custom b { font-family: var(--pop); font-weight: 400; font-size: 18px; color: #fff; text-shadow: 0 0 3px rgb(0 0 0 / .5); pointer-events: none; }
+  .oshi-custom input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: 0; padding: 0; cursor: pointer; }
+  .oshi-custom:focus-within { outline: 3px solid var(--ramune); outline-offset: 2px; }
+  @media (min-width: 560px) {
+    dialog.sheet { margin: auto; border-radius: 24px; border-bottom: 2.5px solid var(--edge); }
+  }
+
+  /* ---------- トースト ---------- */
+  .toast {
+    position: fixed; left: 50%; bottom: calc(var(--tab-h) + 30px + env(safe-area-inset-bottom));
+    transform: translate(-50%, 30px); opacity: 0; visibility: hidden;
+    background: var(--ink); color: var(--card); border-radius: 16px;
+    padding: 10px 14px; font-weight: 700; font-size: 14px;
+    display: flex; gap: 12px; align-items: center;
+    max-width: calc(100vw - 32px); width: max-content;
+    transition: transform .3s cubic-bezier(.3,1.4,.5,1), opacity .2s, visibility .3s;
+    z-index: 30; box-shadow: 0 6px 20px rgb(0 0 0 / .18);
+  }
+  .toast.show { transform: translate(-50%, 0); opacity: 1; visibility: visible; }
+  .toast button {
+    flex: none; border: none; background: var(--lemon); color: var(--on-lemon); border-radius: 10px;
+    padding: 4px 10px; font-weight: 700; font-size: 13px;
+  }
+
+  /* ---------- 紙吹雪 ---------- */
+  .spark { position: fixed; pointer-events: none; font-size: 20px; z-index: 40; animation: burst .9s ease-out forwards; }
+  @keyframes burst { to { transform: translate(var(--dx), var(--dy)) rotate(var(--r)) scale(.6); opacity: 0; } }
+
+  .view { animation: fade .25s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .coin, .spark { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 class="logo">つもり貯金</h1>
+    <p class="tagline">ガマンした分だけ、未来の推し活へ</p>
+  </header>
+
+  <main>
+  <!-- ================= ホーム ================= -->
+  <section class="view" data-view="home" aria-label="ホーム">
+    <div class="hero">
+      <div class="pots" id="potTabs" role="tablist" aria-label="貯金の入れもの"></div>
+      <div class="vessel" id="jarBox">
+        <svg class="jar" viewBox="0 0 200 240" role="img" aria-labelledby="jarTitle">
+          <title id="jarTitle">貯金ビン</title>
+          <defs>
+            <clipPath id="jarClip">
+              <path d="M62 44 H138 V58 Q176 66 176 108 V202 Q176 232 146 232 H54 Q24 232 24 202 V108 Q24 66 62 58 Z"/>
+            </clipPath>
+            <linearGradient id="milk" x1="0" y1="0" x2="0" y2="1">
+              <stop class="milk-top" offset="0" stop-color="#FF9CC3"/>
+              <stop class="milk-bot" offset="1" stop-color="#FF6FA5"/>
+            </linearGradient>
+          </defs>
+          <g clip-path="url(#jarClip)">
+            <rect class="glass" x="0" y="0" width="200" height="240"/>
+            <g class="liquid" id="liquid">
+              <path class="wave" fill="url(#milk)"
+                d="M0 60 Q30 50 60 60 T120 60 T180 60 T240 60 T300 60 T360 60 V300 H0 Z"/>
+              <circle cx="60"  cy="95"  r="5"   fill="#fff" opacity=".55"/>
+              <circle cx="130" cy="120" r="3.5" fill="#fff" opacity=".55"/>
+              <circle cx="95"  cy="150" r="6"   fill="#fff" opacity=".45"/>
+              <circle cx="150" cy="85"  r="2.5" fill="#fff" opacity=".6"/>
+              <path d="M58 180 c0-6 8-6 8 0 c0-6 8-6 8 0 c0 6-8 10-8 12 c0-2-8-6-8-12z" fill="#fff" opacity=".55"/>
+            </g>
+          </g>
+          <path class="outline" d="M62 44 H138 V58 Q176 66 176 108 V202 Q176 232 146 232 H54 Q24 232 24 202 V108 Q24 66 62 58 Z"/>
+          <path class="shine" d="M42 112 Q42 90 60 80"/>
+          <rect class="lid" x="54" y="14" width="92" height="32" rx="10"/>
+          <rect class="slot" x="84" y="26" width="32" height="7" rx="3.5"/>
+          <rect class="tag" x="62" y="160" width="76" height="34" rx="10"/>
+          <text class="tag-text" id="pctText" x="100" y="184" text-anchor="middle">0%</text>
+        </svg>
+      </div>
+
+      <div class="vessel" id="gachaBox" hidden>
+        <svg class="gacha" viewBox="0 0 200 262" role="img" aria-labelledby="gachaTitle">
+          <title id="gachaTitle">ガチャガチャ</title>
+          <defs>
+            <clipPath id="domeClip"><circle cx="100" cy="98" r="78"/></clipPath>
+          </defs>
+          <circle class="dome" cx="100" cy="98" r="80"/>
+          <g clip-path="url(#domeClip)"><g id="caps"></g></g>
+          <circle class="dome-ol" cx="100" cy="98" r="80"/>
+          <path class="shine" d="M40 84 Q44 52 72 34"/>
+          <rect class="cap-top" x="80" y="8" width="40" height="16" rx="6"/>
+          <!-- 本体 -->
+          <rect class="foot" x="42" y="238" width="24" height="14" rx="4"/>
+          <rect class="foot" x="134" y="238" width="24" height="14" rx="4"/>
+          <rect class="body" x="26" y="156" width="148" height="88" rx="18"/>
+          <rect class="tag" x="60" y="166" width="80" height="28" rx="10"/>
+          <text class="tag-text" id="gPct" x="100" y="186" text-anchor="middle">0%</text>
+          <g class="knob" id="knob">
+            <circle class="knob-c" cx="100" cy="219" r="16"/>
+            <rect class="dark" x="86" y="216" width="28" height="6" rx="3"/>
+          </g>
+          <rect class="dark" x="38" y="210" width="30" height="20" rx="7"/>
+          <rect class="dark" x="140" y="208" width="18" height="5" rx="2.5"/>
+        </svg>
+      </div>
+
+      <div class="shelf" id="shelf" hidden>
+        <div class="shelf-rows" id="shelfRows" role="img"></div>
+        <p class="shelf-cap" id="shelfCap"></p>
+      </div>
+
+      <p class="total" aria-live="polite"><span id="total">0</span><small>円</small></p>
+      <p class="lifetime" id="lifetime" hidden></p>
+      <div class="meta" id="meta"></div>
+    </div>
+
+    <section class="panel" id="addPanel" aria-labelledby="addTitle">
+      <h2 id="addTitle">つもりを記録する</h2>
+      <div class="cats" id="cats" role="group" aria-label="なにをガマンした？"></div>
+      <form id="form" novalidate>
+        <div class="field">
+          <label for="name">なにが？</label>
+          <input type="text" id="name" maxlength="60" autocomplete="off" list="nameList" enterkeyhint="next">
+          <datalist id="nameList"></datalist>
+        </div>
+        <div class="field">
+          <label for="amount">使うはずだった金額</label>
+          <div class="yen"><input type="text" id="amount" inputmode="numeric" autocomplete="off" placeholder="0" enterkeyhint="done"></div>
+        </div>
+        <div class="quick" aria-label="金額を足す">
+          <button type="button" data-add="500">+500</button>
+          <button type="button" data-add="1000">+1,000</button>
+          <button type="button" data-add="5000">+5,000</button>
+          <button type="button" data-add="10000">+1万</button>
+          <button type="button" class="clear" data-add="0" aria-label="金額をクリア">クリア</button>
+        </div>
+        <div class="field">
+          <label for="date">日付</label>
+          <div class="date-row">
+            <input type="date" id="date">
+            <button type="button" class="dchip" data-day="0">今日</button>
+            <button type="button" class="dchip" data-day="-1">昨日</button>
+          </div>
+        </div>
+        <button type="button" class="memo-toggle" id="memoToggle" aria-expanded="false" aria-controls="memoField">＋ メモを書く（任意）</button>
+        <div class="field" id="memoField" hidden>
+          <label for="memo">メモ</label>
+          <textarea id="memo" rows="2" maxlength="200" placeholder="例：次こそ当たりますように"></textarea>
+        </div>
+        <div class="field" id="potField" hidden>
+          <span class="lbl">どれに入れる？</span>
+          <div class="cats pot-pick" id="potPick" role="group" aria-label="入れる先"></div>
+        </div>
+        <button class="save" type="submit" id="saveBtn">ビンに入れる</button>
+        <p class="error" id="error" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <section aria-labelledby="recentTitle">
+      <div class="sec-h">
+        <h2 id="recentTitle">さいきんの記録</h2>
+        <button class="link" type="button" data-go="history" id="seeAll">すべて見る →</button>
+      </div>
+      <ul class="tickets" id="recent"></ul>
+    </section>
+  </section>
+
+  <!-- ================= きろく ================= -->
+  <section class="view" data-view="history" aria-labelledby="historyTitle" hidden>
+    <h2 class="view-title" id="historyTitle">きろく</h2>
+    <div class="search"><input type="search" id="q" placeholder="名前やメモでさがす" aria-label="記録をさがす" autocomplete="off"></div>
+    <div class="scroller" id="hCats" role="group" aria-label="カテゴリでしぼりこむ"></div>
+    <p class="h-sum" id="hSum" aria-live="polite"></p>
+    <ul class="tickets" id="tickets"></ul>
+    <button class="more" id="more" type="button" hidden>もっと見る</button>
+  </section>
+
+  <!-- ================= まとめ ================= -->
+  <section class="view" data-view="stats" aria-labelledby="statsTitle" hidden>
+    <h2 class="view-title" id="statsTitle">まとめ</h2>
+    <p class="empty" id="statsEmpty" hidden>記録がたまると、ここにグラフやカレンダーが出てきます</p>
+    <div id="statsBody">
+      <div class="cards" id="cards"></div>
+      <div class="box"><h3>月ごとの推移</h3><div class="bars" id="bars" role="img"></div></div>
+      <div class="box"><h3>カテゴリ別</h3><div id="catBreak"></div></div>
+      <div class="box" id="potBreakBox" hidden><h3>入れもの別</h3><div id="potBreak"></div></div>
+      <div class="box">
+        <div class="cal-head">
+          <button class="cal-nav" type="button" id="calPrev" aria-label="前の月">‹</button>
+          <h3 id="calTitle"></h3>
+          <button class="cal-nav" type="button" id="calNext" aria-label="次の月">›</button>
+        </div>
+        <p class="cal-sum" id="calSum"></p>
+        <div class="cal" id="cal"></div>
+        <ul class="tickets day-list" id="dayList"></ul>
+      </div>
+      <div class="box"><h3>バッジ</h3><div class="badges" id="badges"></div><div id="achieved"></div></div>
+    </div>
+  </section>
+
+  <!-- ================= せってい ================= -->
+  <section class="view" data-view="settings" aria-labelledby="settingsTitle" hidden>
+    <h2 class="view-title" id="settingsTitle">せってい</h2>
+
+    <div class="box">
+      <h3 id="potBoxTitle">目標と入れもの</h3>
+      <ul class="cat-list" id="potList"></ul>
+      <label class="check"><input type="checkbox" id="splitToggle"> <span>用途ごとに入れものを分ける</span></label>
+      <p class="note" id="potNote">「遠征用」「グッズ用」のように、入れものを分けて貯められます。それぞれに目標金額と見た目（ビン／ガチャガチャ）を決められます。</p>
+      <button class="btn" type="button" id="addPot">＋ 入れものを追加</button>
+    </div>
+
+    <div class="box">
+      <h3>カテゴリ</h3>
+      <p class="note">目安の金額を登録しておくと、カテゴリを選んだときに自動で入ります。</p>
+      <ul class="cat-list" id="catList"></ul>
+      <button class="btn" type="button" id="addCat">＋ カテゴリを追加</button>
+    </div>
+
+    <div class="box">
+      <h3>見た目</h3>
+      <span class="lbl">推しカラー</span>
+      <div class="swatches oshi-pick" id="oshiPick" role="group" aria-label="推しカラー"></div>
+      <span class="lbl">画面の明るさ</span>
+      <div class="seg" role="radiogroup" aria-label="画面の明るさ">
+        <button type="button" role="radio" data-theme-val="auto">自動</button>
+        <button type="button" role="radio" data-theme-val="light">ライト</button>
+        <button type="button" role="radio" data-theme-val="dark">ダーク</button>
+      </div>
+    </div>
+
+    <div class="box" id="updateBox" hidden>
+      <h3>アプリの更新</h3>
+      <p class="note">自動では更新しません。このボタンを押したときだけ、新しい版があるか確かめます。記録が送られることはありません。</p>
+      <p class="note" id="updVer"></p>
+      <div class="btns">
+        <button class="btn" type="button" id="updCheck">更新を確認する</button>
+        <button class="btn primary" type="button" id="updApply" hidden>更新する</button>
+      </div>
+      <p class="note upd-msg" id="updMsg" aria-live="polite"></p>
+      <div class="upd-notes" id="updNotes" hidden></div>
+      <div id="updBackWrap" hidden>
+        <hr class="sep">
+        <p class="note">更新して使いにくくなったときは、1つ前の版に戻せます。更新する直前の記録の控えも一緒に戻します。</p>
+        <button class="btn" type="button" id="updBack">前の版に戻す</button>
+      </div>
+    </div>
+
+    <div class="box">
+      <h3>データ</h3>
+      <p class="note">記録はこのブラウザの中だけに保存されています。機種変更やブラウザのデータ削除の前に書き出しておくと、あとで読み込んで戻せます。</p>
+      <p class="note" id="storageInfo"></p>
+      <p class="note install" id="installNote" hidden>📲 ホーム画面に追加すると、アプリのように開けて、機内モードでも使えます。記録も消えにくくなります。<br>iPhone：Safari の共有ボタン →「ホーム画面に追加」<br>Android：Chrome のメニュー（︙）→「ホーム画面に追加」</p>
+      <div class="btns">
+        <button class="btn" type="button" id="exportBtn">バックアップを書き出す</button>
+        <label class="btn filebtn">バックアップを読み込む<input type="file" id="importFile" accept="application/json,.json"></label>
+        <button class="btn" type="button" id="csvBtn">CSVで書き出す</button>
+      </div>
+      <hr class="sep">
+      <button class="btn danger" type="button" id="wipeBtn">すべての記録を削除</button>
+    </div>
+    <p class="credit">つもり貯金 ・ © 2026 maruhana (@maruhanax6lq) ・ MIT License</p>
+  </section>
+  </main>
+</div>
+
+<!-- ================= タブバー ================= -->
+<nav class="tabbar" aria-label="メニュー">
+  <div class="tabbar-in">
+    <button class="tab" type="button" data-go="home">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2.5" width="10" height="4" rx="1.5"/><path d="M8 6.5h8c2.5.8 3.5 2.6 3.5 5v6.5a3 3 0 0 1-3 3h-9a3 3 0 0 1-3-3v-6.5c0-2.4 1-4.2 3.5-5z"/><path d="M4.5 14c3-1.5 5 1.5 7.5 0s4.5-1.5 7.5 0"/></svg>
+      ホーム
+    </button>
+    <button class="tab" type="button" data-go="history">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5h18v3.5a2 2 0 0 0 0 4v3.5H3V14a2 2 0 0 0 0-4z"/><path d="M8.5 7v10" stroke-dasharray="1.6 2"/></svg>
+      きろく
+    </button>
+    <button class="tab-add" type="button" id="tabAdd" aria-label="つもりを記録する">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+    <button class="tab" type="button" data-go="stats">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 20.5h17"/><rect x="5" y="11" width="3.5" height="7" rx="1"/><rect x="10.25" y="5" width="3.5" height="13" rx="1"/><rect x="15.5" y="8.5" width="3.5" height="9.5" rx="1"/></svg>
+      まとめ
+    </button>
+    <button class="tab" type="button" data-go="settings">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M18 7h2M4 17h3M11 17h9"/><circle cx="15.5" cy="7" r="2.3"/><circle cx="8.8" cy="17" r="2.3"/></svg>
+      せってい
+    </button>
+  </div>
+</nav>
+
+<!-- ================= 記録の編集シート ================= -->
+<dialog class="sheet" id="entrySheet" aria-labelledby="eTitle">
+  <div class="sheet-in">
+    <div class="grab" aria-hidden="true"></div>
+    <div class="sheet-h"><h2 id="eTitle">記録を編集</h2><button class="x" type="button" data-close aria-label="閉じる">×</button></div>
+    <form id="eForm" novalidate>
+      <div class="cats" id="eCats" role="group" aria-label="カテゴリ"></div>
+      <div class="field"><label for="eName">なにが？</label><input type="text" id="eName" maxlength="60" autocomplete="off"></div>
+      <div class="row">
+        <div class="field"><label for="eAmount">金額</label><div class="yen"><input type="text" id="eAmount" inputmode="numeric" autocomplete="off"></div></div>
+        <div class="field date"><label for="eDate">日付</label><input type="date" id="eDate"></div>
+      </div>
+      <div class="field" id="ePotField"><span class="lbl">入れもの</span><div class="cats pot-pick" id="ePots" role="group" aria-label="入れもの"></div></div>
+      <div class="field"><label for="eMemo">メモ</label><textarea id="eMemo" rows="2" maxlength="200"></textarea></div>
+      <p class="error" id="eError" aria-live="polite"></p>
+      <button class="save" type="submit">変更を保存</button>
+      <div class="sheet-actions">
+        <button class="btn grow" type="button" id="eAgain">🔁 今日もう一度記録</button>
+        <button class="btn danger" type="button" id="eDelete">削除</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<!-- ================= 入れもの（用途と目標）の編集シート ================= -->
+<dialog class="sheet" id="potSheet" aria-labelledby="pTitle">
+  <div class="sheet-in">
+    <div class="grab" aria-hidden="true"></div>
+    <div class="sheet-h"><h2 id="pTitle">入れもの</h2><button class="x" type="button" data-close aria-label="閉じる">×</button></div>
+    <form id="goalForm" novalidate>
+      <div class="field">
+        <label for="gName">なに用？（目標の名前）</label>
+        <input type="text" id="gName" maxlength="24" placeholder="例：遠征用、グッズ用">
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="gAmount">目標金額</label>
+          <div class="yen"><input type="text" id="gAmount" inputmode="numeric" autocomplete="off"></div>
+        </div>
+        <div class="field date">
+          <label for="gDeadline">期日（任意）</label>
+          <input type="date" id="gDeadline">
+        </div>
+      </div>
+      <div id="gViewWrap">
+        <span class="lbl">見た目</span>
+        <div class="seg two" role="radiogroup" aria-label="見た目">
+          <button type="button" role="radio" data-vessel="jar">ビン</button>
+          <button type="button" role="radio" data-vessel="gacha">ガチャガチャ</button>
+        </div>
+      </div>
+      <div id="gResetWrap">
+        <label class="check"><input type="checkbox" id="gReset"> <span id="gResetText">ビンを空にして、ここから数え直す</span></label>
+        <p class="note">これまでの記録は消えません。合計は「まとめ」でいつでも見られます。</p>
+      </div>
+      <p class="error" id="gError" aria-live="polite"></p>
+      <div class="sheet-actions">
+        <button class="btn danger" type="button" id="gDelete">削除</button>
+        <button class="btn primary grow" type="submit">保存</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<!-- ================= カテゴリの編集シート ================= -->
+<dialog class="sheet" id="catSheet" aria-labelledby="cTitle">
+  <div class="sheet-in">
+    <div class="grab" aria-hidden="true"></div>
+    <div class="sheet-h"><h2 id="cTitle">カテゴリ</h2><button class="x" type="button" data-close aria-label="閉じる">×</button></div>
+    <form id="cForm" novalidate>
+      <div class="row">
+        <div class="field emoji-f"><label for="cEmoji">絵文字</label><input type="text" id="cEmoji" maxlength="16" autocomplete="off" placeholder="なし"></div>
+        <div class="field"><label for="cLabel">名前</label><input type="text" id="cLabel" maxlength="12" autocomplete="off" placeholder="例：舞台落選"></div>
+      </div>
+      <div class="emoji-pick" id="emojiPick" role="group" aria-label="絵文字をえらぶ"></div>
+      <div class="field"><label for="cPreset">目安の金額（任意）</label><div class="yen"><input type="text" id="cPreset" inputmode="numeric" autocomplete="off"></div></div>
+      <div class="field"><label for="cHint">入力例（任意）</label><input type="text" id="cHint" maxlength="40" placeholder="例：秋ツアー 名古屋公演"></div>
+      <div class="field"><span class="lbl">色</span><div class="swatches" id="swatches" role="group" aria-label="色をえらぶ"></div></div>
+      <p class="error" id="cError" aria-live="polite"></p>
+      <div class="sheet-actions">
+        <button class="btn danger" type="button" id="cDelete">削除</button>
+        <button class="btn primary grow" type="submit">保存</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite">
+  <span id="toastMsg"></span><button type="button" id="toastBtn" hidden>元に戻す</button>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  // =========================================================
+  // 定数
+  // =========================================================
+  const KEY = "tsumori-chokin-v1";              // 旧バージョンと同じキー（データをそのまま引き継ぐ）
+  const THEME_KEY = "tsumori-chokin-theme";
+  const DEFAULT_CATS = [
+    { id: "live",  label: "ライブ落選", emoji: "",   tint: "#FFE0EC", preset: 11000, hint: "例：夏ツアー 横浜公演" },
+    { id: "trip",  label: "遠征やめた", emoji: "",   tint: "#DDEEFF", preset: 20000, hint: "例：大阪遠征の新幹線とホテル" },
+    { id: "goods", label: "グッズ我慢", emoji: "",   tint: "#FFF3C4", preset: 5000,  hint: "例：ランダム缶バッジ 10個" },
+    { id: "other", label: "そのほか",   emoji: "",   tint: "#EAF7DF", preset: 0,     hint: "例：コンビニスイーツ" },
+  ];
+  // version 3 までの標準カテゴリの絵文字（変えていなければ、移行のときに「なし」にする）
+  const OLD_EMOJI = { live: "🎤", trip: "🚄", goods: "🧸", cafe: "🧋", cosme: "💄", other: "🍀" };
+  const PALETTE = ["#FFE0EC", "#DDEEFF", "#FFF3C4", "#DDF6EE", "#EEE6FF", "#EAF7DF", "#FFE4D1", "#D8F3FF"];
+  const EMOJIS = ["🎤", "🚄", "🧸", "🧋", "💄", "🍀", "🎫", "💿", "👕", "🍰", "🎮", "📚", "🍺", "🚕", "🛍️", "💅", "✈️", "🍜"];
+  const MILESTONES = [
+    { v: 10000,   i: "🌱", n: "1万円" },  { v: 30000,   i: "🍓", n: "3万円" },
+    { v: 50000,   i: "🎀", n: "5万円" },  { v: 100000,  i: "💎", n: "10万円" },
+    { v: 200000,  i: "👑", n: "20万円" }, { v: 300000,  i: "🌈", n: "30万円" },
+    { v: 500000,  i: "🚀", n: "50万円" }, { v: 1000000, i: "🏰", n: "100万円" },
+  ];
+  const MAX_AMOUNT = 10000000;
+  const MAX_ENTRIES = 20000;
+  const MAX_CATS = 40;
+  const MAX_POTS = 12;
+  const IMPORT_MAX_BYTES = 5 * 1024 * 1024;
+  const PAGE = 30;
+  const WEEK = "日月火水木金土";
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // =========================================================
+  // 小さなヘルパー
+  // =========================================================
+  const $ = id => document.getElementById(id);
+  const yen = n => Math.round(n).toLocaleString("ja-JP");
+  const pad = n => String(n).padStart(2, "0");
+  const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const today = () => ymd(new Date());
+  const isYmd = s => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
+  const parseYmd = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+  const addDays = (s, n) => { const d = parseYmd(s); d.setDate(d.getDate() + n); return ymd(d); };
+  const daysBetween = (a, b) => Math.round((parseYmd(b) - parseYmd(a)) / 86400000);
+  const sum = list => list.reduce((s, e) => s + e.amount, 0);
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const short = n => n >= 10000 ? `${+(n / 10000).toFixed(n >= 100000 ? 0 : 1)}万` : yen(n);
+  const fmtDate = s => {
+    const d = parseYmd(s);
+    const y = d.getFullYear() !== new Date().getFullYear() ? `${d.getFullYear()}/` : "";
+    return `${y}${d.getMonth() + 1}/${d.getDate()}(${WEEK[d.getDay()]})`;
+  };
+  // 全角数字・カンマ入りでも数として読む
+  const toHalf = s => String(s).replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+  const parseAmount = s => { const d = toHalf(s).replace(/\D/g, ""); return d ? Number(d) : 0; };
+  const setAmount = (input, n) => { input.value = n ? yen(n) : ""; };
+  const firstGrapheme = s => {
+    s = String(s || "").trim();
+    if (!s) return "";
+    if (window.Intl && Intl.Segmenter) {
+      for (const { segment } of new Intl.Segmenter("ja", { granularity: "grapheme" }).segment(s)) return segment;
+    }
+    return [...s][0];
+  };
+  // DOM を組み立てる（textContent 経由なので入力値をそのまま入れても安全）
+  function h(tag, attrs, ...kids) {
+    const e = document.createElement(tag);
+    if (attrs) for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === "class") e.className = v;
+      else if (k === "style") e.style.cssText = v;
+      else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+      else e.setAttribute(k, v === true ? "" : v);
+    }
+    for (const c of kids.flat()) if (c != null && c !== false) e.append(c.nodeType ? c : String(c));
+    return e;
+  }
+
+  // =========================================================
+  // データ（読み込み・正規化・保存）
+  // =========================================================
+  function normCat(c) {
+    if (!c || typeof c.id !== "string" || !c.id || typeof c.label !== "string") return null;
+    return {
+      id: c.id.slice(0, 40),
+      label: c.label.trim().slice(0, 12) || "カテゴリ",
+      emoji: firstGrapheme(c.emoji),            // "" は絵文字なし
+      tint: /^#[0-9a-f]{6}$/i.test(c.tint) ? c.tint : PALETTE[0],
+      preset: Math.max(0, Math.min(MAX_AMOUNT, Math.floor(Number(c.preset)) || 0)),
+      hint: typeof c.hint === "string" ? c.hint.slice(0, 40) : "",
+    };
+  }
+  function normEntry(e, catIds) {
+    if (!e || typeof e.name !== "string" || !isYmd(e.date)) return null;
+    const amount = Math.floor(Number(e.amount));
+    if (!Number.isFinite(amount) || amount <= 0) return null;
+    return {
+      id: typeof e.id === "string" && e.id ? e.id.slice(0, 40) : uid(),
+      name: e.name.trim().slice(0, 60) || "（名前なし）",
+      amount: Math.min(amount, MAX_AMOUNT),
+      category: catIds.has(e.category) ? e.category : "other",
+      date: e.date,
+      createdAt: Number(e.createdAt) || 0,
+      memo: typeof e.memo === "string" ? e.memo.slice(0, 200) : "",
+      pot: typeof e.pot === "string" ? e.pot.slice(0, 40) : "",
+    };
+  }
+  function normGoal(g) {
+    if (!g) return null;
+    const amount = Math.floor(Number(g.amount));
+    if (!Number.isFinite(amount) || amount < 1000) return null;
+    return {
+      name: String(g.name || "目標").trim().slice(0, 24) || "目標",
+      amount: Math.min(amount, MAX_AMOUNT * 10),
+      deadline: isYmd(g.deadline) ? g.deadline : "",
+      base: Math.max(0, Math.floor(Number(g.base)) || 0),
+    };
+  }
+  // 入れもの（用途ごとのビン / ガチャ）。目標・見た目・満タンで棚に並んだ数をそれぞれに持つ
+  function normShelf(sh) {
+    return {
+      n: Math.max(0, Math.min(100000, Math.floor(Number(sh && sh.n)) || 0)),
+      amount: Math.max(0, Math.floor(Number(sh && sh.amount)) || 0),
+    };
+  }
+  function normPot(p) {
+    if (!p || typeof p.id !== "string" || !p.id) return null;
+    const g = normGoal(p) || { name: String(p.name || "目標").trim().slice(0, 24) || "目標", amount: 100000, deadline: "", base: 0 };
+    return { id: p.id.slice(0, 40), ...g, view: p.view === "gacha" ? "gacha" : "jar", shelf: normShelf(p.shelf) };
+  }
+  const newPot = (id, name = "つぎの遠征", view = "jar") =>
+    ({ id, name, amount: 100000, deadline: "", base: 0, view, shelf: { n: 0, amount: 0 } });
+
+  function normalize(raw) {
+    const cats = [], catIds = new Set();
+    const src = raw && Array.isArray(raw.cats) && raw.cats.length ? raw.cats : DEFAULT_CATS;
+    for (const c of src) { const n = normCat(c); if (n && !catIds.has(n.id)) { catIds.add(n.id); cats.push(n); } }
+    if (!catIds.has("other")) { cats.push({ ...DEFAULT_CATS[DEFAULT_CATS.length - 1] }); catIds.add("other"); }
+    // version 3 までの標準にあった「カフェ我慢」「コスメ我慢」は外した。記録で使っていなければ 1 回だけ取り除く
+    if (raw && !Array.isArray(raw.pots)) {
+      const used = new Set(Array.isArray(raw.entries) ? raw.entries.map(e => e && e.category) : []);
+      for (const id of ["cafe", "cosme"]) if (catIds.has(id) && !used.has(id)) {
+        cats.splice(cats.findIndex(c => c.id === id), 1); catIds.delete(id);
+      }
+      for (const c of cats) if (OLD_EMOJI[c.id] && c.emoji === OLD_EMOJI[c.id]) c.emoji = "";
+    }
+    // 入れもの。version 3 までは 1 つだけだったので、その目標・棚・見た目を「main」に移す
+    const pots = [], potIds = new Set();
+    if (raw && Array.isArray(raw.pots)) {
+      for (const p of raw.pots.slice(0, MAX_POTS)) { const n = normPot(p); if (n && !potIds.has(n.id)) { potIds.add(n.id); pots.push(n); } }
+    } else if (raw) {
+      const g = normGoal(raw.goal);
+      pots.push({ ...newPot("main", g ? g.name : undefined, raw.view), ...(g || {}), shelf: normShelf(raw.shelf) });
+      potIds.add("main");
+    }
+    if (!pots.length) { pots.push(newPot("main")); potIds.add("main"); }
+    const legacy = !(raw && Array.isArray(raw.pots));
+    const entries = [], ids = new Set();
+    if (raw && Array.isArray(raw.entries)) for (const e of raw.entries) {
+      const n = normEntry(e, catIds);
+      if (!n || ids.has(n.id)) continue;
+      // 古いデータは全部 1 つ目へ。削除した入れものの記録は ""（どこにも入っていない。合計には数える）
+      if (!potIds.has(n.pot)) n.pot = legacy ? pots[0].id : "";
+      ids.add(n.id); entries.push(n);
+    }
+    const achieved = raw && Array.isArray(raw.achieved)
+      ? raw.achieved.filter(a => a && typeof a.name === "string" && Number.isFinite(a.amount) && isYmd(a.date))
+          .map(a => ({ name: a.name.slice(0, 40), amount: Math.floor(a.amount), date: a.date })).slice(-50)
+      : [];
+    return {
+      version: 4, entries, cats, achieved, pots,
+      split: pots.length > 1 || !!(raw && raw.split === true),   // 用途ごとに分ける（せっていでオンにしたときだけ）
+      cur: raw && potIds.has(raw.cur) ? raw.cur : pots[0].id,   // いまホームに出している入れもの（記録の入れ先）
+    };
+  }
+  function load() {
+    let raw = null;
+    try { raw = JSON.parse(localStorage.getItem(KEY)); } catch {}
+    return normalize(raw);
+  }
+  let state = load();
+  let storageOk = true;
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); storageOk = true; }
+    catch { if (storageOk) toast("このブラウザでは保存できません。閉じると記録が消えます"); storageOk = false; }
+  }
+
+  const catOf = id => state.cats.find(c => c.id === id) || state.cats.find(c => c.id === "other") || DEFAULT_CATS[DEFAULT_CATS.length - 1];
+  const sorted = () => [...state.entries].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
+  const potOf = id => state.pots.find(p => p.id === id);
+  const curPot = () => potOf(state.cur) || state.pots[0];
+  const potEntries = p => state.entries.filter(e => e.pot === p.id);
+  const jarAmount = (p = curPot()) => Math.max(0, sum(potEntries(p)) - p.base);
+
+  function streak() {
+    const days = new Set(state.entries.map(e => e.date));
+    let d = today();
+    if (!days.has(d)) d = addDays(d, -1);
+    let n = 0;
+    while (days.has(d)) { n++; d = addDays(d, -1); }
+    return n;
+  }
+
+  // =========================================================
+  // 共通パーツ
+  // =========================================================
+  let freshId = null;
+
+  function ticket(e, fresh) {
+    const c = catOf(e.category);
+    return h("li", { class: "ticket" + (fresh ? " new" : "") },
+      h("button", { type: "button", class: "ticket-btn", "aria-label": `${e.name}、${yen(e.amount)}円、${fmtDate(e.date)}。タップで編集`, onclick: () => openEdit(e.id) },
+        h("span", { class: "stub", style: `--tint:${c.tint}`, "aria-hidden": "true" }, c.emoji),
+        h("span", { class: "t-body" },
+          h("span", { class: "t-name" }, e.name),
+          h("span", { class: "t-meta" }, `${fmtDate(e.date)}・${c.label}` + (state.pots.length > 1 && potOf(e.pot) ? `・${potOf(e.pot).name}` : "")),
+          e.memo ? h("span", { class: "t-memo" }, e.memo) : null),
+        h("span", { class: "t-amount" }, `+${yen(e.amount)}円`)));
+  }
+
+  const catText = c => c.emoji ? `${c.emoji} ${c.label}` : c.label;
+
+  function renderCatChips(box, sel, onPick) {
+    box.replaceChildren(...state.cats.map(c => h("button", {
+      type: "button", class: "cat", "aria-pressed": String(c.id === sel), style: `--tint:${c.tint}`,
+      onclick: () => onPick(c.id),
+    }, catText(c))));
+  }
+
+  // 金額欄：打つたびに 3 桁カンマを付ける（カーソル位置は数字の並びで保つ）
+  function bindAmount(input) {
+    input.addEventListener("input", () => {
+      const pos = input.selectionStart ?? input.value.length;
+      const rightDigits = toHalf(input.value.slice(pos)).replace(/\D/g, "").length;
+      const digits = toHalf(input.value).replace(/\D/g, "").replace(/^0+(?=\d)/, "").slice(0, 9);
+      const f = digits ? Number(digits).toLocaleString("ja-JP") : "";
+      input.value = f;
+      let i = f.length, cnt = 0;
+      while (i > 0 && cnt < rightDigits) { i--; if (/\d/.test(f[i])) cnt++; }
+      try { input.setSelectionRange(i, i); } catch {}
+    });
+  }
+
+  // =========================================================
+  // ホーム
+  // =========================================================
+  let selected = DEFAULT_CATS[0].id;
+  let displayed = null;
+  let numRaf = 0;
+
+  function animateNumber(el, from, to) {
+    cancelAnimationFrame(numRaf);
+    if (reduced || from === to) { el.textContent = yen(to); return; }
+    const start = performance.now(), dur = 700;
+    const step = t => {
+      const p = Math.min(1, (t - start) / dur);
+      el.textContent = yen(from + (to - from) * (1 - Math.pow(1 - p, 3)));
+      if (p < 1) numRaf = requestAnimationFrame(step);
+    };
+    numRaf = requestAnimationFrame(step);
+  }
+
+  // 満タンのビン（棚に並べる）
+  const SHELF_MAX = 16, SHELF_ROW = 8;
+  const MINI_SVG = '<svg class="mini" viewBox="0 0 28 34" aria-hidden="true">' +
+    '<path class="b" d="M8.5 7.5h11c4.5 1 6.5 3.8 6.5 7.5v13.5a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V15c0-3.7 2-6.5 6.5-7.5z"/>' +
+    '<path class="s" d="M6 18v-3c0-1.8.8-3 2.3-3.6"/>' +
+    '<path class="h" d="M11 21.5c0-2 2.8-2 3 0c.2-2 3-2 3 0c0 2-3 3.3-3 4.3c0-1-3-2.3-3-4.3z"/>' +
+    '<rect class="l" x="7" y="1.5" width="14" height="6.5" rx="2"/></svg>';
+  const MINI_GACHA_SVG = '<svg class="mini" viewBox="0 0 28 34" aria-hidden="true">' +
+    '<circle class="g" cx="14" cy="12" r="10"/>' +
+    '<circle cx="10" cy="15" r="3.2" fill="#FF6FA5"/><circle cx="17.5" cy="15.5" r="3" fill="#5FA8F5"/><circle cx="14" cy="9.5" r="2.6" fill="#FFC93C"/>' +
+    '<rect class="b" x="4" y="19" width="20" height="13" rx="3.5"/>' +
+    '<circle class="l" cx="14" cy="25.5" r="3.2"/><rect class="d" x="6.5" y="26" width="4" height="3" rx="1"/></svg>';
+
+  // ビンかガチャかで変わる呼び名
+  const isGacha = (p = curPot()) => p.view === "gacha";
+  const V = (p = curPot()) => isGacha(p)
+    ? { noun: "ガチャ", unit: "台", full: "いっぱい" }
+    : { noun: "ビン", unit: "本", full: "満タン" };
+  const vessel = () => $(isGacha() ? "gachaBox" : "jarBox");
+
+  const splitJar = (jar, p = curPot()) => {
+    const g = p.amount, full = Math.floor(jar / g);
+    return { full, part: jar - full * g };
+  };
+  let popShelf = false;
+
+  function renderShelf(cur) {
+    const pop = popShelf; popShelf = false;
+    const p = curPot();
+    const full = p.shelf.n + cur;
+    const worth = p.shelf.amount + cur * p.amount;
+    $("shelf").hidden = full <= 0;
+    if (full <= 0) return;
+    const n = Math.min(full, SHELF_MAX), items = [];
+    for (let i = 0; i < n; i++) {
+      const w = h("span", { class: "mini-wrap" + (pop && i === n - 1 ? " pop" : "") });
+      w.innerHTML = isGacha() ? MINI_GACHA_SVG : MINI_SVG;
+      items.push(w);
+    }
+    // 1段に SHELF_ROW 本ずつ、段ごとに棚板を付ける（入りきらない分は最後の段に「+N」）
+    const rows = [];
+    for (let i = 0; i < items.length; i += SHELF_ROW) rows.push(h("div", { class: "shelf-row" }, items.slice(i, i + SHELF_ROW)));
+    if (full > SHELF_MAX) rows[rows.length - 1].append(h("span", { class: "shelf-more" }, `+${full - SHELF_MAX}`));
+    $("shelfRows").replaceChildren(...rows);
+    const v = V();
+    $("shelfRows").setAttribute("aria-label", `${v.full}の${v.noun} ${full}${v.unit}`);
+    $("shelfCap").textContent = `${v.full}の${v.noun} ×${full}（${yen(worth)}円ぶん）`;
+  }
+
+  // ---------- ガチャガチャ ----------
+  // 記録 1 件がカプセル 1 個。面積が金額に比例し、目標額ちょうどで筐体がいっぱいになる大きさにする
+  const GX = 100, GY = 98, GR = 78, FLOOR = 156;
+  const CAP_K = 3700;                  // (玉の総面積 ÷ π) の目標額あたりの値。最大の玉（10%）10 個でドームがほぼ埋まる
+  const CAP_MAX = 0.1;                 // 玉 1 個は目標の 10% ぶんまで（10 個で満タン）
+  const VIVID = {                      // カテゴリの淡い色 → カプセルの色
+    "#FFE0EC": "#FF6FA5", "#DDEEFF": "#5FA8F5", "#FFF3C4": "#FFC93C", "#DDF6EE": "#3CC9A0",
+    "#EEE6FF": "#A68BFF", "#EAF7DF": "#8CD65A", "#FFE4D1": "#FF9A52", "#D8F3FF": "#43C6E8",
+  };
+  const capColor = tint => VIVID[String(tint).toUpperCase()] || "#FF6FA5";
+  const hash01 = s => { let x = 2166136261; for (const ch of s) { x ^= ch.charCodeAt(0); x = Math.imul(x, 16777619); } return (x >>> 0) / 4294967296; };
+  let capPos = new Map();              // id → 前回の位置（新しい玉が入っても、ほかの玉は少し動くだけにする）
+
+  // k 台目（0 始まり、目標を変えた時点から数える）に入っている記録と、その台に入った金額
+  function machineItems(k) {
+    const p = curPot(), g = p.amount, from = p.base + k * g, to = from + g;
+    const list = potEntries(p).sort((a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : 1));
+    const out = [];
+    let cum = 0;
+    for (const e of list) {
+      const s = cum, t = (cum += e.amount);
+      const amt = Math.min(t, to) - Math.max(s, from);
+      // 10% を超える分は、同じ色の玉を 10% ずつに分けて入れる
+      for (let left = amt, i = 0; left > 0; left -= g * CAP_MAX, i++) {
+        out.push({ id: i ? `${e.id}#${i}` : e.id, e, amt: Math.min(left, g * CAP_MAX) });
+      }
+      if (cum >= to) break;
+    }
+    return out.slice(-150);            // 多すぎると重くなるので新しい順に 150 個まで
+  }
+
+  // かんたんな物理：重力で下に落とし、重なった玉を押し広げ、ドームと床からはみ出さないようにする
+  function layoutCapsules(items) {
+    const balls = items.map(({ id, amt }) => {
+      const r = Math.max(6, Math.sqrt((amt / curPot().amount) * CAP_K));
+      const p = capPos.get(id), j = hash01(id);
+      return { id, r, x: p ? p.x : GX + (j - .5) * 50, y: p ? p.y : GY - GR + r + 4 };
+    });
+    for (let it = 0; it < 260; it++) {
+      for (const b of balls) b.y += 0.8;
+      for (let i = 0; i < balls.length; i++) {
+        const a = balls[i];
+        for (let k = i + 1; k < balls.length; k++) {
+          const b = balls[k];
+          let dx = b.x - a.x, dy = b.y - a.y;
+          const m = a.r + b.r, d2 = dx * dx + dy * dy;
+          if (d2 >= m * m) continue;
+          let d = Math.sqrt(d2);
+          if (d < 1e-6) { dx = hash01(a.id + b.id) - .5 || .1; dy = -.3; d = Math.hypot(dx, dy); }
+          const push = (m - d) / d, wa = (b.r * b.r) / (a.r * a.r + b.r * b.r), wb = 1 - wa;
+          a.x -= dx * push * wa; a.y -= dy * push * wa;
+          b.x += dx * push * wb; b.y += dy * push * wb;
+        }
+      }
+      for (const b of balls) {
+        if (b.y > FLOOR - b.r) b.y = FLOOR - b.r;
+        const dx = b.x - GX, dy = b.y - GY, d = Math.hypot(dx, dy), lim = Math.max(0, GR - b.r);
+        if (d > lim && d > 0) { b.x = GX + (dx / d) * lim; b.y = GY + (dy / d) * lim; }
+      }
+    }
+    return balls;
+  }
+
+  const SVGNS = "http://www.w3.org/2000/svg";
+  const sv = (tag, attrs) => { const el = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v); return el; };
+  const capTransform = (x, y) => `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px)`;
+
+  function capsuleEl(e, id) {
+    const c = catOf(e.category);
+    const g = sv("g", { class: "capsule" });
+    g.dataset.id = id;
+    const inner = sv("g");
+    inner.append(
+      sv("path", { class: "c-top", d: "M-1 0A1 1 0 0 1 1 0Z", fill: capColor(c.tint) }),
+      sv("path", { class: "c-bot", d: "M-1 0A1 1 0 0 0 1 0Z" }),
+      sv("path", { class: "c-eq", d: "M-1 0H1", "vector-effect": "non-scaling-stroke" }),
+      sv("circle", { class: "c-ol", r: 1, "vector-effect": "non-scaling-stroke" }),
+      sv("ellipse", { class: "c-sh", cx: -.35, cy: -.5, rx: .22, ry: .13, transform: "rotate(-35 -.35 -.5)" }));
+    g.append(inner);
+    return g;
+  }
+
+  // k 台目の中身を描く。instant のときはアニメーションなしで置く
+  function renderGacha(k, pct, instant) {
+    const items = machineItems(k);
+    const balls = layoutCapsules(items);
+    const box = $("caps");
+    const have = new Map([...box.children].map(el => [el.dataset.id, el]));
+    const keep = new Set();
+    for (let i = 0; i < balls.length; i++) {
+      const b = balls[i], e = items[i].e;
+      keep.add(b.id);
+      let el = have.get(b.id);
+      const fresh = !el;
+      if (fresh) { el = capsuleEl(e, b.id); box.append(el); }
+      else el.querySelector(".c-top").setAttribute("fill", capColor(catOf(e.category).tint));
+      el.firstChild.setAttribute("transform", `rotate(${Math.round((hash01(b.id + "r") - .5) * 70)}) scale(${b.r.toFixed(2)})`);
+      const to = capTransform(b.x, b.y);
+      if (instant || reduced) {
+        el.classList.add("instant"); el.style.transform = to;
+        void el.getBoundingClientRect(); el.classList.remove("instant");
+      } else if (fresh) {
+        // 上の口から落ちてくる
+        el.classList.add("instant"); el.style.transform = capTransform(GX, GY - GR - b.r - 10);
+        void el.getBoundingClientRect(); el.classList.remove("instant");
+        requestAnimationFrame(() => { el.style.transform = to; });
+      } else el.style.transform = to;
+    }
+    for (const [id, el] of have) if (!keep.has(id)) el.remove();
+    capPos = new Map(balls.map(b => [b.id, { x: b.x, y: b.y }]));
+    $("gPct").textContent = `${pct}%`;
+    $("gachaBox").querySelector("svg").setAttribute("aria-label", `ガチャガチャ。カプセル${balls.length}個、${pct}%`);
+  }
+  function clearGacha() { $("caps").replaceChildren(); capPos = new Map(); }
+  function turnKnob() {
+    const k = $("knob");
+    k.classList.remove("turn"); void k.getBoundingClientRect(); k.classList.add("turn");
+  }
+
+  let instantPaint = true;             // 起動直後の 1 回はアニメーションなしで置く
+
+  // 入れもの（用途）のタブ。記録フォームの「どれに入れる？」も同じものを指す
+  function renderPotTabs() {
+    const many = state.pots.length > 1;
+    $("potTabs").hidden = !state.split;
+    $("potTabs").replaceChildren(...state.pots.map(p => h("button", {
+      type: "button", class: "pot-tab", role: "tab", "aria-selected": String(p.id === state.cur),
+      onclick: () => switchPot(p.id),
+    }, p.name)), state.pots.length < MAX_POTS ? h("button", {
+      type: "button", class: "pot-tab add", "aria-label": "入れものを追加", onclick: () => openPot(null),
+    }, many ? "＋" : "＋ 入れものを追加") : null);
+    $("potField").hidden = !(state.split && many);
+    renderPotChips($("potPick"), state.cur, switchPot);
+    const bar = $("potTabs"), sel = bar.querySelector('[aria-selected="true"]');
+    if (sel && (sel.offsetLeft < bar.scrollLeft || sel.offsetLeft + sel.offsetWidth > bar.scrollLeft + bar.clientWidth)) {
+      bar.scrollLeft = sel.offsetLeft - (bar.clientWidth - sel.offsetWidth) / 2;
+    }
+  }
+  function renderPotChips(box, sel, onPick) {
+    box.replaceChildren(...state.pots.map(p => h("button", {
+      type: "button", class: "cat", "aria-pressed": String(p.id === sel), onclick: () => onPick(p.id),
+    }, p.name)));
+  }
+  // 表示する入れものを切り替える（アニメーションなしで置き直す）
+  function switchPot(id) {
+    if (id === state.cur || !potOf(id)) return;
+    state.cur = id;
+    save();
+    clearGacha();
+    instantPaint = true;
+    displayed = null;
+    $("liquid").style.transition = "none";
+    renderHome();
+    requestAnimationFrame(() => requestAnimationFrame(() => { $("liquid").style.transition = ""; }));
+    const b = vessel();
+    if (!reduced) { b.classList.remove("swap"); void b.offsetWidth; b.classList.add("swap"); setTimeout(() => b.classList.remove("swap"), 650); }
+  }
+  function stepPot(d) {
+    const i = state.pots.findIndex(p => p.id === state.cur), n = state.pots.length;
+    if (n > 1) switchPot(state.pots[(i + d + n) % n].id);
+  }
+
+  function renderHome() {
+    const total = sum(state.entries);
+    const jar = jarAmount();
+    const goal = curPot();
+    const { full, part } = splitJar(jar);
+    const ratio = part / goal.amount;
+    const v = V();
+    $("jarBox").hidden = isGacha();
+    $("gachaBox").hidden = !isGacha();
+    if (isGacha()) renderGacha(full, Math.floor(ratio * 100), instantPaint);
+    else {
+      $("liquid").style.transform = `translateY(${176 - ratio * 176}px)`;
+      $("pctText").textContent = `${Math.floor(ratio * 100)}%`;
+    }
+    instantPaint = false;
+    $("saveBtn").textContent = `${v.noun}に入れる`;
+    $("gResetText").textContent = `${v.noun}を空にして、ここから数え直す`;
+    renderShelf(full);
+    renderPotTabs();
+    animateNumber($("total"), displayed ?? jar, jar);
+    displayed = jar;
+
+    const rest = goal.amount - jar;
+
+    // 入れものが複数あるか、数え直したときは、全体の合計も出す
+    const potTotal = sum(potEntries(goal)), life = [];
+    if (goal.base > 0) life.push(total !== potTotal ? `「${goal.name}」これまで ${yen(potTotal)}円` : `これまでの合計 ${yen(total)}円`);
+    if (total !== potTotal) life.push(`ぜんぶの入れもの ${yen(total)}円`);
+    $("lifetime").hidden = !life.length;
+    $("lifetime").textContent = life.join("・");
+
+    const chips = [];
+    const s = streak();
+    if (s >= 2) chips.push(h("span", { class: "chip hot" }, `🔥 ${s}日連続`));
+    else if (state.entries.some(e => e.date === today())) chips.push(h("span", { class: "chip hot" }, "✅ 今日も記録"));
+    if (goal.deadline && rest > 0) {
+      const d = daysBetween(today(), goal.deadline);
+      if (d > 0) chips.push(h("span", { class: "chip" }, `⏳ あと${d}日・1日${yen(Math.ceil(rest / d))}円ペース`));
+      else if (d === 0) chips.push(h("span", { class: "chip" }, "⏳ 今日が期日"));
+      else chips.push(h("span", { class: "chip" }, `⏳ 期日を${-d}日すぎました`));
+    }
+    $("meta").replaceChildren(...chips);
+
+    renderFormCats();
+    const recent = sorted().slice(0, 3);
+    $("recent").replaceChildren(...(recent.length
+      ? recent.map(e => ticket(e, e.id === freshId))
+      : [h("li", { class: "empty" }, "まだ空っぽ。落選した日も、ガマンした日も、ここに記録していこう")]));
+    $("seeAll").hidden = state.entries.length <= 3;
+  }
+
+  function renderFormCats() {
+    if (!state.cats.some(c => c.id === selected)) selected = state.cats[0].id;
+    renderCatChips($("cats"), selected, selectCat);
+    $("name").placeholder = catOf(selected).hint || "例：なにをガマンした？";
+  }
+  function selectCat(id) {
+    const prev = catOf(selected), next = catOf(id);
+    const amt = $("amount"), cur = parseAmount(amt.value);
+    // 金額が空か、前のカテゴリの目安のままなら、新しい目安に入れ替える
+    if (!cur || cur === prev.preset) setAmount(amt, next.preset);
+    selected = id;
+    renderFormCats();
+    updateNameList();
+  }
+
+  function updateNameList() {
+    const seen = new Set(), names = [];
+    const list = sorted();
+    for (const pass of [e => e.category === selected, () => true]) {
+      for (const e of list) {
+        if (names.length >= 30) break;
+        if (pass(e) && !seen.has(e.name)) { seen.add(e.name); names.push(e.name); }
+      }
+    }
+    $("nameList").replaceChildren(...names.map(n => h("option", { value: n })));
+  }
+
+  function syncDateChips() {
+    const v = $("date").value, t = today();
+    document.querySelectorAll(".dchip").forEach(b => {
+      b.setAttribute("aria-pressed", String(v === addDays(t, Number(b.dataset.day))));
+    });
+  }
+
+  // =========================================================
+  // きろく
+  // =========================================================
+  let hq = "", hcat = "all", hshown = PAGE;
+
+  function renderHistory() {
+    if (hcat !== "all" && !state.cats.some(c => c.id === hcat)) hcat = "all";
+    const chips = [{ id: "all", label: "すべて", emoji: "", tint: "#FFFFFF" }, ...state.cats];
+    $("hCats").replaceChildren(...chips.map(c => h("button", {
+      type: "button", class: "cat", "aria-pressed": String(c.id === hcat), style: `--tint:${c.tint}`,
+      onclick: () => { hcat = c.id; hshown = PAGE; renderHistory(); },
+    }, catText(c))));
+    renderHistoryList();
+  }
+
+  function renderHistoryList() {
+    const ul = $("tickets");
+    if (!state.entries.length) {
+      ul.replaceChildren(h("li", { class: "empty" }, "まだ空っぽ。落選した日も、ガマンした日も、ここに記録していこう"));
+      $("hSum").textContent = ""; $("more").hidden = true;
+      return;
+    }
+    const q = hq.trim().toLowerCase();
+    const list = sorted().filter(e =>
+      (hcat === "all" || e.category === hcat) &&
+      (!q || e.name.toLowerCase().includes(q) || e.memo.toLowerCase().includes(q)));
+    $("hSum").textContent = list.length ? `${list.length}件・合計 +${yen(sum(list))}円` : "";
+    if (!list.length) {
+      ul.replaceChildren(h("li", { class: "empty" }, "条件に合う記録はありません"));
+      $("more").hidden = true;
+      return;
+    }
+    const months = new Map();
+    for (const e of list) {
+      const k = e.date.slice(0, 7), o = months.get(k) || { n: 0, v: 0 };
+      o.n++; o.v += e.amount; months.set(k, o);
+    }
+    const items = [];
+    let last = null;
+    for (const e of list.slice(0, hshown)) {
+      const k = e.date.slice(0, 7);
+      if (k !== last) {
+        last = k;
+        const o = months.get(k), [y, m] = k.split("-").map(Number);
+        items.push(h("li", { class: "group-h" }, h("span", null, `${y}年${m}月`), h("span", null, `${o.n}件・+${yen(o.v)}円`)));
+      }
+      items.push(ticket(e, e.id === freshId));
+    }
+    ul.replaceChildren(...items);
+    const left = list.length - hshown;
+    $("more").hidden = left <= 0;
+    $("more").textContent = `もっと見る（あと${left}件）`;
+  }
+
+  // =========================================================
+  // まとめ
+  // =========================================================
+  let calMonth = today().slice(0, 7);
+  let calDay = null;
+
+  function renderStats() {
+    const es = state.entries;
+    $("statsEmpty").hidden = es.length > 0;
+    $("statsBody").hidden = es.length === 0;
+    if (!es.length) return;
+
+    const t = today(), now = parseYmd(t), ym = t.slice(0, 7);
+    const lastYm = ymd(new Date(now.getFullYear(), now.getMonth() - 1, 1)).slice(0, 7);
+    const total = sum(es);
+    const thisM = sum(es.filter(e => e.date.startsWith(ym)));
+    const lastM = sum(es.filter(e => e.date.startsWith(lastYm)));
+    const top = es.reduce((a, b) => (b.amount > a.amount ? b : a));
+    const days = new Set(es.map(e => e.date)).size;
+    const diff = thisM - lastM;
+
+    const card = (l, v, s) => h("div", { class: "card" }, h("span", { class: "c-l" }, l), h("b", { class: "c-v" }, v), h("span", { class: "c-s" }, s));
+    $("cards").replaceChildren(
+      card("これまでの合計", `${yen(total)}円`, `${es.length}回・${days}日分`),
+      card(`${now.getMonth() + 1}月`, `+${yen(thisM)}円`, lastM ? `先月より ${diff >= 0 ? "+" : "−"}${yen(Math.abs(diff))}円` : "先月の記録なし"),
+      card("1回あたり", `${yen(total / es.length)}円`, "平均"),
+      card("いちばんの我慢", `${yen(top.amount)}円`, top.name),
+    );
+
+    // 月ごとの推移（直近6か月）
+    const months = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1), k = ymd(d).slice(0, 7);
+      months.push({ k, m: d.getMonth() + 1, v: sum(es.filter(e => e.date.startsWith(k))) });
+    }
+    const max = Math.max(...months.map(x => x.v), 1);
+    $("bars").setAttribute("aria-label", "直近6か月: " + months.map(x => `${x.m}月 ${yen(x.v)}円`).join("、"));
+    $("bars").replaceChildren(...months.map(x => h("div", { class: "bar" + (x.k === ym ? " now" : ""), "aria-hidden": "true" },
+      h("b", null, x.v ? short(x.v) : "–"),
+      h("i", { style: `height:${Math.max(4, Math.round((x.v / max) * 104))}px` }),
+      h("span", null, `${x.m}月`))));
+
+    // カテゴリ別
+    const rows = state.cats.map(c => {
+      const list = es.filter(e => e.category === c.id);
+      return { c, n: list.length, v: sum(list) };
+    }).filter(r => r.v > 0).sort((a, b) => b.v - a.v);
+    $("catBreak").replaceChildren(...rows.map(r => h("div", { class: "catrow" },
+      h("span", { class: "cr-l" }, catText(r.c)),
+      h("span", { class: "c-s" }, `${r.n}回`),
+      h("span", { class: "cr-v" }, `${yen(r.v)}円`, h("small", null, `${Math.round((r.v / total) * 100)}%`)),
+      h("div", { class: "meter", "aria-hidden": "true" },
+        h("i", { style: `width:${(r.v / rows[0].v) * 100}%;background:color-mix(in srgb, ${r.c.tint} 35%, var(--accent))` })))));
+
+    // 入れもの別（2 つ以上あるときだけ）
+    const prow = state.pots.length > 1 ? [...state.pots, { id: "", name: "削除した入れもの" }].map(p => {
+      const list = es.filter(e => e.pot === p.id);
+      return { p, n: list.length, v: sum(list) };
+    }).filter(r => r.v > 0) : [];
+    $("potBreakBox").hidden = !prow.length;
+    const pmax = Math.max(1, ...prow.map(x => x.v));
+    $("potBreak").replaceChildren(...prow.map(r => h("div", { class: "catrow" },
+      h("span", { class: "cr-l" }, r.p.name),
+      h("span", { class: "c-s" }, `${r.n}回`),
+      h("span", { class: "cr-v" }, `${yen(r.v)}円`, h("small", null, `${Math.round((r.v / total) * 100)}%`)),
+      h("div", { class: "meter", "aria-hidden": "true" }, h("i", { style: `width:${(r.v / pmax) * 100}%` })))));
+
+    renderCalendar();
+
+    // バッジ
+    $("badges").replaceChildren(...MILESTONES.map(m => {
+      const on = total >= m.v;
+      return h("div", { class: "badge " + (on ? "on" : "off"), "aria-label": `合計${m.n}${on ? " 達成" : " 未達成"}` },
+        h("span", { class: "i", "aria-hidden": "true" }, on ? m.i : "🔒"), m.n);
+    }));
+    const ach = [...state.achieved].reverse();
+    $("achieved").replaceChildren(...(ach.length ? [
+      h("h3", { style: "margin-top:16px" }, "達成した目標"),
+      h("ul", { class: "achieved" }, ...ach.map(a => h("li", null, "🏆", h("b", null, a.name), h("span", null, `${yen(a.amount)}円`), h("small", null, fmtDate(a.date))))),
+    ] : []));
+  }
+
+  function renderCalendar() {
+    const [y, m] = calMonth.split("-").map(Number);
+    $("calTitle").textContent = `${y}年${m}月`;
+    const inMonth = state.entries.filter(e => e.date.startsWith(calMonth));
+    $("calSum").textContent = inMonth.length ? `${inMonth.length}回・+${yen(sum(inMonth))}円` : "この月の記録はありません";
+    $("calNext").disabled = calMonth >= today().slice(0, 7);
+
+    const byDay = new Map();
+    for (const e of inMonth) {
+      if (!byDay.has(e.date)) byDay.set(e.date, []);
+      byDay.get(e.date).push(e);
+    }
+    const cells = [...WEEK].map((w, i) => h("div", { class: "dow" + (i === 0 ? " sun" : i === 6 ? " sat" : ""), "aria-hidden": "true" }, w));
+    const startDow = new Date(y, m - 1, 1).getDay(), n = new Date(y, m, 0).getDate(), t = today();
+    for (let i = 0; i < startDow; i++) cells.push(h("div", { "aria-hidden": "true" }));
+    for (let d = 1; d <= n; d++) {
+      const k = `${y}-${pad(m)}-${pad(d)}`;
+      const list = byDay.get(k) || [];
+      const big = list.reduce((a, b) => (!a || b.amount > a.amount ? b : a), null);
+      const amt = sum(list);
+      cells.push(h("button", {
+        type: "button",
+        class: "day" + (list.length ? " has" : "") + (k === t ? " today" : "") + (k === calDay ? " sel" : ""),
+        "aria-label": `${m}月${d}日 ${list.length ? `${list.length}件 ${yen(amt)}円` : "記録なし"}`,
+        "aria-pressed": String(k === calDay),
+        onclick: () => { calDay = calDay === k ? null : k; renderCalendar(); },
+      }, h("span", { class: "n" }, d), big && catOf(big.category).emoji ? h("span", { class: "e" }, catOf(big.category).emoji) : null, amt ? h("span", { class: "a" }, short(amt)) : null));
+    }
+    $("cal").replaceChildren(...cells);
+
+    const dl = $("dayList");
+    if (calDay && calDay.startsWith(calMonth)) {
+      const list = (byDay.get(calDay) || []).sort((a, b) => b.createdAt - a.createdAt);
+      const addBtn = calDay <= t ? h("li", { style: "list-style:none" }, h("button", {
+        type: "button", class: "btn sm lemon day-add",
+        onclick: () => { $("date").value = calDay; syncDateChips(); go("home", true); },
+      }, "＋ この日に記録する")) : null;
+      dl.replaceChildren(
+        h("li", { class: "group-h" }, h("span", null, fmtDate(calDay)), h("span", null, list.length ? `+${yen(sum(list))}円` : "")),
+        ...(list.length ? list.map(e => ticket(e)) : [h("li", { class: "empty small" }, "この日の記録はありません")]),
+        addBtn);
+    } else dl.replaceChildren();
+  }
+
+  // =========================================================
+  // せってい
+  // =========================================================
+  // ---------- 入れもの（用途と目標）の編集シート ----------
+  let potEditId = null, potView = "jar";
+  function syncVesselSeg() {
+    document.querySelectorAll("[data-vessel]").forEach(b => b.setAttribute("aria-checked", String(b.dataset.vessel === potView)));
+    $("gResetText").textContent = `${potView === "gacha" ? "ガチャ" : "ビン"}を空にして、ここから数え直す`;
+  }
+  function openPot(id) {
+    const p = id ? potOf(id) : null;
+    if (!p && state.pots.length >= MAX_POTS) { toast(`入れものは${MAX_POTS}個までです`); return; }
+    potEditId = p ? p.id : null;
+    potView = p ? p.view : curPot().view;
+    $("pTitle").textContent = p ? "入れものを編集" : "入れものを追加";
+    $("gName").value = p ? p.name : "";
+    setAmount($("gAmount"), p ? p.amount : 30000);
+    $("gDeadline").value = p ? p.deadline : "";
+    $("gReset").checked = false;
+    $("gError").textContent = "";
+    $("gResetWrap").hidden = !p || jarAmount(p) <= 0;
+    $("gDelete").hidden = !p || state.pots.length <= 1;
+    $("gViewWrap").hidden = !!p;                 // 作ったあとの見た目は、せっていの一覧で切り替える
+    syncVesselSeg();
+    $("potSheet").showModal();
+  }
+
+  function renderSettings() {
+    const counts = new Map();
+    for (const e of state.entries) counts.set(e.category, (counts.get(e.category) || 0) + 1);
+    $("catList").replaceChildren(...state.cats.map(c => h("li", { class: "cat-row" },
+      h("span", { class: "cr-e", style: `--tint:${c.tint}`, "aria-hidden": "true" }, c.emoji),
+      h("span", { class: "cr-b" }, h("b", null, c.label), h("small", null, c.preset ? `目安 ${yen(c.preset)}円` : "目安なし")),
+      h("span", { class: "cr-n" }, `${counts.get(c.id) || 0}件`),
+      h("button", { type: "button", class: "btn sm", "aria-label": `${c.label} を編集`, onclick: () => openCat(c.id) }, "編集"))));
+    let bytes = 0;
+    try { bytes = new Blob([localStorage.getItem(KEY) || ""]).size; } catch {}
+    $("storageInfo").textContent = `いまの記録：${state.entries.length}件（約${Math.max(1, Math.ceil(bytes / 1024))}KB）`;
+    $("potList").replaceChildren(...state.pots.map(p => {
+      const { full } = splitJar(jarAmount(p), p), v = V(p), n = p.shelf.n + full;
+      return h("li", { class: "pot-row" },
+        h("div", { class: "cat-row" },
+          h("span", { class: "cr-b" }, h("b", null, p.name),
+            h("small", null, `目標 ${yen(p.amount)}円` + (n ? `・${v.full} ${n}${v.unit}` : ""))),
+          h("span", { class: "cr-n" }, `${potEntries(p).length}件`),
+          h("button", { type: "button", class: "btn sm", "aria-label": `${p.name} を編集`, onclick: () => openPot(p.id) }, "編集")),
+        h("div", { class: "seg two sm", role: "radiogroup", "aria-label": `${p.name} の見た目` },
+          ...[["jar", "ビン"], ["gacha", "ガチャガチャ"]].map(([k, label]) => h("button", {
+            type: "button", role: "radio", "aria-checked": String(p.view === k), onclick: () => setPotView(p, k),
+          }, label))));
+    }));
+    $("addPot").hidden = !state.split || state.pots.length >= MAX_POTS;
+    $("splitToggle").checked = state.split;
+    $("potBoxTitle").textContent = state.split ? "貯金の入れもの" : "目標と入れもの";
+  }
+
+  // テーマ
+  function syncThemeColor() {
+    const c = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
+    $("themeColor").setAttribute("content", c || "#FFF4F8");
+  }
+  function applyTheme(v) {
+    const r = document.documentElement;
+    if (v === "light" || v === "dark") r.setAttribute("data-theme", v); else { v = "auto"; r.removeAttribute("data-theme"); }
+    try { localStorage.setItem(THEME_KEY, v); } catch {}
+    document.querySelectorAll("[data-theme-val]").forEach(b => b.setAttribute("aria-checked", String(b.dataset.themeVal === v)));
+    syncThemeColor();
+  }
+
+  // 推しカラー（配色の計算は <head> の oshiPaint）
+  const OSHI_KEY = "tsumori-chokin-oshi";
+  const OSHI_PRESETS = [
+    ["ピンク", "#FF6FA5"], ["赤", "#F2555A"], ["オレンジ", "#FF9A3C"], ["黄色", "#FFD23F"], ["黄緑", "#9BD14B"],
+    ["緑", "#34C08A"], ["水色", "#5CC8F0"], ["青", "#4A7BEA"], ["紫", "#A374E8"]
+  ];
+  let oshi = "#FF6FA5";
+  function applyOshi(hex, remember) {
+    oshi = /^#[0-9a-f]{6}$/i.test(hex || "") ? hex.toUpperCase() : "#FF6FA5";
+    window.oshiPaint(oshi);
+    if (remember) try { localStorage.setItem(OSHI_KEY, oshi); } catch {}
+    const preset = OSHI_PRESETS.some(p => p[1] === oshi);
+    $("oshiPick").querySelectorAll(".sw").forEach(b =>
+      b.setAttribute("aria-pressed", String(b.dataset.c ? b.dataset.c === oshi : !preset)));
+    $("oshiCustom").value = oshi.toLowerCase();
+    syncThemeColor();
+  }
+  function buildOshiPick() {
+    const custom = h("label", { class: "sw oshi-custom", title: "じぶんで選ぶ" },
+      h("b", { "aria-hidden": "true" }, "＋"),
+      h("input", { type: "color", id: "oshiCustom", "aria-label": "推しカラーをじぶんで選ぶ" }));
+    $("oshiPick").replaceChildren(
+      ...OSHI_PRESETS.map(([name, c]) => h("button", {
+        type: "button", class: "sw", "data-c": c, style: `background:${c}`, "aria-label": name,
+        onclick: () => applyOshi(c, true),
+      })),
+      custom);
+    // 選んでいる途中も色が変わるように input、決まったら保存
+    $("oshiCustom").addEventListener("input", e => applyOshi(e.target.value, false));
+    $("oshiCustom").addEventListener("change", e => { applyOshi(e.target.value, true); toast("推しカラーにしました"); });
+  }
+
+  // =========================================================
+  // 描画まとめ
+  // =========================================================
+  function render() {
+    renderHome();
+    renderHistory();
+    renderStats();
+    renderSettings();
+    updateNameList();
+    freshId = null;
+  }
+
+  // =========================================================
+  // 演出
+  // =========================================================
+  function dropCoin(jarBefore) {
+    if (reduced) return;
+    if (isGacha()) { turnKnob(); return; }     // ガチャはハンドルを回す
+    const box = $("jarBox");
+    if (!box.offsetParent) return;
+    const coin = h("div", { class: "coin", "aria-hidden": "true" }, "¥");
+    const ratio = splitJar(jarBefore).part / curPot().amount;
+    const surface = (60 + 176 - ratio * 176) * box.clientWidth / 200;
+    coin.style.setProperty("--fall", Math.max(40, surface) + "px");
+    box.appendChild(coin);
+    setTimeout(() => coin.remove(), 800);
+  }
+  function bumpJar() {
+    const b = vessel();
+    b.classList.remove("bump"); void b.offsetWidth; b.classList.add("bump");
+    setTimeout(() => b.classList.remove("bump"), 600);
+  }
+  function sparkle(x, y) {
+    if (reduced) return;
+    const icons = ["💖", "✨", "🌸", "⭐", "🎀"];
+    for (let i = 0; i < 18; i++) {
+      const s = h("span", { class: "spark", "aria-hidden": "true" }, icons[i % icons.length]);
+      s.style.left = x + "px"; s.style.top = y + "px";
+      const a = Math.random() * Math.PI * 2, r = 70 + Math.random() * 100;
+      s.style.setProperty("--dx", Math.cos(a) * r + "px");
+      s.style.setProperty("--dy", Math.sin(a) * r - 50 + "px");
+      s.style.setProperty("--r", (Math.random() * 300 - 150) + "deg");
+      document.body.appendChild(s);
+      setTimeout(() => s.remove(), 950);
+    }
+  }
+  function burst() {
+    setTimeout(() => {
+      const r = vessel().getBoundingClientRect();
+      const vis = r.width > 0 && r.bottom > 0 && r.top < innerHeight;
+      sparkle(vis ? r.left + r.width / 2 : innerWidth / 2, vis ? r.top + r.height / 2 : innerHeight / 2);
+    }, reduced ? 0 : 600);
+  }
+  function buzz(pattern) { try { navigator.vibrate && navigator.vibrate(pattern); } catch {} }
+
+  let toastTimer = null;
+  function toast(msg, action, label = "元に戻す") {
+    $("toastMsg").textContent = msg;
+    const btn = $("toastBtn");
+    btn.hidden = !action;
+    btn.textContent = label;
+    btn.onclick = action ? () => { hideToast(); action(); } : null;
+    $("toast").classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, action ? 6000 : 3200);
+  }
+  function hideToast() { $("toast").classList.remove("show"); }
+
+  // =========================================================
+  // 追加・編集・削除
+  // =========================================================
+  // p: 金額が増えた入れもの。bj/aj はその入れものの前後の中身、bt/at は全体の合計の前後
+  function celebrate(p, bj, aj, bt, at) {
+    const goal = p.amount;
+    const fb = splitJar(bj, p).full, fa = splitJar(aj, p).full;
+    if (fa > fb) {
+      // いっぱいになったビン（ガチャ）の数だけ「達成した目標」に残す
+      const v = V(p);
+      for (let k = fb + 1; k <= fa; k++) {
+        state.achieved.push({ name: k > 1 ? `${p.name}（${k}${v.unit}目）` : p.name, amount: goal, date: today() });
+      }
+      while (state.achieved.length > 50) state.achieved.shift();
+      burst();
+      const msg = fa - fb > 1 ? `🎉 一気に${v.noun}${fa - fb}${v.unit}が${v.full}！（${fa}${v.unit}目まで）`
+        : fa === 1 ? `🎉「${p.name}」たっせい！ 新しい${v.noun}に入れていきます`
+        : `🎉 ${fa}${v.unit}目の${v.noun}が${v.full}！ 新しい${v.noun}に入れていきます`;
+      return { msg, ach: fa - fb };
+    }
+    const m = MILESTONES.filter(x => bt < x.v && at >= x.v).pop();
+    if (m) { burst(); return { msg: `${m.i} 合計${m.n}たまりました！`, ach: 0 }; }
+    return null;
+  }
+
+  // 満タンになったら：いったん100%まで満たして光らせ → 新しいビンに入れ替え、棚に1本追加
+  function fillAndSwap() {
+    if (isGacha()) return fillAndSwapGacha();
+    const box = $("jarBox"), liq = $("liquid");
+    liq.style.transform = "translateY(0px)";
+    $("pctText").textContent = "100%";
+    bumpJar();
+    box.classList.add("full");
+    setTimeout(() => {
+      box.classList.remove("full", "swap");
+      liq.style.transition = "none";
+      liq.style.transform = "translateY(176px)";
+      void box.offsetWidth;
+      liq.style.transition = "";
+      popShelf = true;
+      render();                        // 新しいビンが余りの分まで溜まっていく
+      box.classList.add("swap");
+      setTimeout(() => box.classList.remove("swap"), 650);
+    }, 1500);
+  }
+
+  // ガチャ：最後のカプセルが落ちて筐体がいっぱいになる → 光る → 空の筐体に入れ替え、棚に 1 台追加
+  function fillAndSwapGacha() {
+    const box = $("gachaBox");
+    const { full } = splitJar(jarAmount());
+    renderGacha(full - 1, 100, false);
+    setTimeout(() => { bumpJar(); box.classList.add("full"); }, 700);
+    setTimeout(() => {
+      box.classList.remove("full", "swap");
+      clearGacha();
+      popShelf = true;
+      render();                        // 新しい筐体に、あふれた分のカプセルが入る
+      box.classList.add("swap");
+      setTimeout(() => box.classList.remove("swap"), 650);
+    }, 2300);
+  }
+
+  function addEntry(entry) {
+    if (!potOf(entry.pot)) entry.pot = curPot().id;
+    if (entry.pot !== state.cur) switchPot(entry.pot);   // 入れる先の入れものを見せてから入れる
+    const p = curPot();
+    const bj = jarAmount(p), bt = sum(state.entries);
+    state.entries.push(entry);
+    freshId = entry.id;
+    const c = celebrate(p, bj, jarAmount(p), bt, bt + entry.amount);
+    save();
+    if (current === "home" && !reduced) {
+      dropCoin(bj);
+      // コインがビンに入ってから（ガチャはハンドルが回ってから）中身を増やす
+      setTimeout(() => {
+        if (c && c.ach) fillAndSwap();
+        else { render(); if (!isGacha()) bumpJar(); else setTimeout(bumpJar, 700); }
+      }, isGacha() ? 350 : 450);
+    } else { if (c && c.ach) { popShelf = true; clearGacha(); } render(); }
+    buzz(c ? [20, 40, 20] : 15);
+    toast(c ? c.msg : `+${yen(entry.amount)}円「${p.name}」に入れました`, () => {
+      const i = state.entries.findIndex(e => e.id === entry.id);
+      if (i >= 0) state.entries.splice(i, 1);
+      if (c) state.achieved.splice(state.achieved.length - c.ach, c.ach);
+      save(); render();
+      toast("取り消しました");
+    }, "取り消す");
+  }
+
+  function validate(name, amount, errEl, nameEl, amountEl) {
+    if (!name) { errEl.textContent = "「なにが？」を入れてください"; nameEl.focus(); return false; }
+    if (!amount || amount < 1) { errEl.textContent = "金額を1円以上で入れてください"; amountEl.focus(); return false; }
+    if (amount > MAX_AMOUNT) { errEl.textContent = `金額は${yen(MAX_AMOUNT)}円までです`; amountEl.focus(); return false; }
+    errEl.textContent = "";
+    return true;
+  }
+
+  $("form").addEventListener("submit", ev => {
+    ev.preventDefault();
+    const name = $("name").value.trim();
+    const amount = parseAmount($("amount").value);
+    if (!validate(name, amount, $("error"), $("name"), $("amount"))) return;
+    addEntry({
+      id: uid(), name, amount, category: selected,
+      date: isYmd($("date").value) ? $("date").value : today(),
+      createdAt: Date.now(), memo: $("memo").value.trim().slice(0, 200), pot: state.cur,
+    });
+    $("name").value = "";
+    $("memo").value = "";
+    $("memoField").hidden = true;
+    $("memoToggle").hidden = false;
+    $("memoToggle").setAttribute("aria-expanded", "false");
+    setAmount($("amount"), catOf(selected).preset);
+    $("name").blur(); $("amount").blur();
+    // スマホでビン（ガチャ）が見えるように上へ
+    const jarTop = vessel().getBoundingClientRect().top;
+    if (jarTop < 0) window.scrollTo({ top: window.scrollY + jarTop - 16, behavior: reduced ? "auto" : "smooth" });
+  });
+
+  // 過去と同じ名前を選んだら、金額とカテゴリを引き継ぐ
+  $("name").addEventListener("change", () => {
+    const v = $("name").value.trim();
+    if (!v) return;
+    const hit = sorted().find(e => e.name === v);
+    if (!hit) return;
+    const cur = parseAmount($("amount").value);
+    if (!cur || cur === catOf(selected).preset) setAmount($("amount"), hit.amount);
+    if (hit.category !== selected && state.cats.some(c => c.id === hit.category)) { selected = hit.category; renderFormCats(); }
+  });
+
+  document.querySelectorAll(".quick button").forEach(b => b.addEventListener("click", () => {
+    const amt = $("amount"), add = Number(b.dataset.add);
+    setAmount(amt, add ? Math.min(MAX_AMOUNT, parseAmount(amt.value) + add) : 0);
+    if (!add) amt.focus();
+  }));
+  document.querySelectorAll(".dchip").forEach(b => b.addEventListener("click", () => {
+    $("date").value = addDays(today(), Number(b.dataset.day));
+    syncDateChips();
+  }));
+  $("date").addEventListener("change", syncDateChips);
+  $("memoToggle").addEventListener("click", () => {
+    $("memoField").hidden = false;
+    $("memoToggle").hidden = true;
+    $("memoToggle").setAttribute("aria-expanded", "true");
+    $("memo").focus();
+  });
+
+  function removeEntry(id) {
+    const idx = state.entries.findIndex(e => e.id === id);
+    if (idx < 0) return;
+    const [gone] = state.entries.splice(idx, 1);
+    save(); render();
+    toast(`「${gone.name}」を削除しました`, () => { state.entries.push(gone); save(); render(); });
+  }
+
+  // ---------- 記録の編集シート ----------
+  let editId = null, editCat = null, editPot = "";
+  function openEdit(id) {
+    const e = state.entries.find(x => x.id === id);
+    if (!e) return;
+    editId = id; editCat = e.category;
+    $("eName").value = e.name;
+    setAmount($("eAmount"), e.amount);
+    $("eDate").value = e.date;
+    $("eMemo").value = e.memo || "";
+    $("eError").textContent = "";
+    const pick = cid => { editCat = cid; renderCatChips($("eCats"), editCat, pick); };
+    renderCatChips($("eCats"), editCat, pick);
+    editPot = e.pot;
+    const pickPot = pid => { editPot = pid; renderPotChips($("ePots"), editPot, pickPot); };
+    renderPotChips($("ePots"), editPot, pickPot);
+    $("ePotField").hidden = (!state.split || state.pots.length <= 1) && potOf(e.pot) != null;
+    $("entrySheet").showModal();
+  }
+  $("eForm").addEventListener("submit", ev => {
+    ev.preventDefault();
+    const e = state.entries.find(x => x.id === editId);
+    if (!e) { $("entrySheet").close(); return; }
+    const name = $("eName").value.trim(), amount = parseAmount($("eAmount").value);
+    if (!validate(name, amount, $("eError"), $("eName"), $("eAmount"))) return;
+    const before = { ...e };
+    const p = potOf(editPot) || null;
+    const bj = p ? jarAmount(p) : 0, bt = sum(state.entries);
+    Object.assign(e, {
+      name, amount, category: editCat,
+      date: isYmd($("eDate").value) ? $("eDate").value : e.date,
+      memo: $("eMemo").value.trim().slice(0, 200),
+      pot: p ? p.id : e.pot,
+    });
+    // 金額を増やしてビンが満タンになった・節目を超えたときも、追加と同じようにお祝いする
+    const c = p ? celebrate(p, bj, jarAmount(p), bt, sum(state.entries)) : null;
+    if (c && c.ach && p.id === state.cur) popShelf = true;
+    save(); render();
+    $("entrySheet").close();
+    toast(c ? c.msg : "記録を更新しました", () => {
+      Object.assign(e, before);
+      if (c && c.ach) state.achieved.splice(state.achieved.length - c.ach, c.ach);
+      save(); render();
+    });
+  });
+  $("eDelete").addEventListener("click", () => { $("entrySheet").close(); removeEntry(editId); });
+  $("eAgain").addEventListener("click", () => {
+    const e = state.entries.find(x => x.id === editId);
+    if (!e) return;
+    $("entrySheet").close();
+    addEntry({ id: uid(), name: e.name, amount: e.amount, category: e.category, date: today(), createdAt: Date.now(), memo: "", pot: potOf(e.pot) ? e.pot : state.cur });
+  });
+
+  // ---------- カテゴリの編集シート ----------
+  let catEditId = null, catTint = PALETTE[0];
+  function renderCatSheetPickers() {
+    const cur = firstGrapheme($("cEmoji").value);
+    $("emojiPick").replaceChildren(
+      h("button", {
+        type: "button", class: "none", "aria-pressed": String(!cur), "aria-label": "絵文字なし",
+        onclick: () => { $("cEmoji").value = ""; renderCatSheetPickers(); },
+      }, "なし"),
+      ...EMOJIS.map(em => h("button", {
+        type: "button", "aria-pressed": String(em === cur), "aria-label": em,
+        onclick: () => { $("cEmoji").value = em; renderCatSheetPickers(); },
+      }, em)));
+    $("swatches").replaceChildren(...PALETTE.map(p => h("button", {
+      type: "button", class: "sw", style: `background:${p}`, "aria-pressed": String(p === catTint), "aria-label": `色 ${p}`,
+      onclick: () => { catTint = p; renderCatSheetPickers(); },
+    })));
+  }
+  function openCat(id) {
+    const c = id ? state.cats.find(x => x.id === id) : null;
+    catEditId = c ? c.id : null;
+    $("cTitle").textContent = c ? "カテゴリを編集" : "カテゴリを追加";
+    $("cEmoji").value = c ? c.emoji : "";
+    $("cLabel").value = c ? c.label : "";
+    setAmount($("cPreset"), c ? c.preset : 0);
+    $("cHint").value = c ? c.hint : "";
+    catTint = c ? c.tint : PALETTE[state.cats.length % PALETTE.length];
+    $("cError").textContent = "";
+    $("cDelete").hidden = !c || c.id === "other";
+    renderCatSheetPickers();
+    $("catSheet").showModal();
+  }
+  $("cEmoji").addEventListener("input", renderCatSheetPickers);
+  $("addCat").addEventListener("click", () => openCat(null));
+  $("cForm").addEventListener("submit", ev => {
+    ev.preventDefault();
+    const label = $("cLabel").value.trim();
+    if (!label) { $("cError").textContent = "名前を入れてください"; $("cLabel").focus(); return; }
+    const preset = parseAmount($("cPreset").value);
+    if (preset > MAX_AMOUNT) { $("cError").textContent = `金額は${yen(MAX_AMOUNT)}円までです`; return; }
+    const data = { label: label.slice(0, 12), emoji: firstGrapheme($("cEmoji").value), preset, hint: $("cHint").value.trim().slice(0, 40), tint: catTint };
+    if (catEditId) Object.assign(state.cats.find(c => c.id === catEditId), data);
+    else if (state.cats.length >= MAX_CATS) { $("cError").textContent = `カテゴリは${MAX_CATS}個までです`; return; }
+    else {
+      const i = state.cats.findIndex(c => c.id === "other");
+      state.cats.splice(i < 0 ? state.cats.length : i, 0, { id: "c_" + uid(), ...data });
+    }
+    save(); render();
+    $("catSheet").close();
+    toast(catEditId ? "カテゴリを更新しました" : `「${data.label}」を追加しました`);
+  });
+  $("cDelete").addEventListener("click", () => {
+    const c = state.cats.find(x => x.id === catEditId);
+    if (!c || c.id === "other") return;
+    const n = state.entries.filter(e => e.category === c.id).length;
+    if (!confirm(`「${c.label}」を削除します。${n ? `${n}件の記録は「${catOf("other").label}」に移ります。` : ""}よろしいですか？`)) return;
+    for (const e of state.entries) if (e.category === c.id) e.category = "other";
+    state.cats = state.cats.filter(x => x.id !== c.id);
+    save(); render();
+    $("catSheet").close();
+    toast(`「${c.label}」を削除しました`);
+  });
+
+  // シート共通：× ボタンと背景タップで閉じる
+  document.querySelectorAll("dialog.sheet").forEach(d => {
+    d.addEventListener("click", ev => { if (ev.target === d) d.close(); });
+    d.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => d.close()));
+  });
+
+  // =========================================================
+  // 目標
+  // =========================================================
+  $("goalForm").addEventListener("submit", ev => {
+    ev.preventDefault();
+    const name = ($("gName").value.trim() || "目標").slice(0, 24);
+    const amount = parseAmount($("gAmount").value);
+    const err = $("gError");
+    const old = potEditId ? potOf(potEditId) : null;
+    if (state.pots.some(p => p.name === name && p !== old)) { err.textContent = "同じ名前の入れものがあります"; $("gName").focus(); return; }
+    if (!amount || amount < 1000) { err.textContent = "目標は1,000円以上にしてください"; $("gAmount").focus(); return; }
+    if (amount > MAX_AMOUNT * 10) { err.textContent = "目標が大きすぎます"; $("gAmount").focus(); return; }
+    const deadline = $("gDeadline").value;
+    if (deadline && deadline < today() && !(old && deadline === old.deadline)) { err.textContent = "期日は今日以降の日付にしてください"; $("gDeadline").focus(); return; }
+    err.textContent = "";
+    const dl = isYmd(deadline) ? deadline : "";
+
+    if (!old) {
+      if (state.pots.length >= MAX_POTS) { err.textContent = `入れものは${MAX_POTS}個までです`; return; }
+      const p = { ...newPot("p_" + uid(), name, potView), amount, deadline: dl };
+      state.pots.push(p);
+      save();
+      $("potSheet").close();
+      switchPot(p.id);
+      render();
+      toast(`「${name}」を作りました。記録するときに選べます`);
+      return;
+    }
+
+    const reset = $("gReset").checked;
+    const total = sum(potEntries(old)), wasCur = old.id === state.cur, viewChanged = old.view !== potView;
+    // いまの目標で満タンになっているビンは棚に移し、途中の分だけを新しい目標に引き継ぐ
+    const { full } = splitJar(jarAmount(old), old);
+    old.shelf.n += full;
+    old.shelf.amount += full * old.amount;
+    Object.assign(old, {
+      name, amount, deadline: dl, view: potView,
+      base: reset ? total : old.base + full * old.amount,
+    });
+    // 目標を下げて、引き継いだ分だけで満タンになったら、そのぶんお祝いして記録に残す
+    const c = celebrate(old, 0, jarAmount(old), total, total);
+    if (c && wasCur) popShelf = true;
+    if (viewChanged && wasCur) { clearGacha(); dropOnHome = potView === "gacha"; }
+    save(); render();
+    $("potSheet").close();
+    toast(c ? c.msg : reset ? `${V(old).noun}を空にして「${name}」をスタート！` : `「${name}」を保存しました`);
+  });
+  document.querySelectorAll("[data-vessel]").forEach(b => b.addEventListener("click", () => {
+    potView = b.dataset.vessel === "gacha" ? "gacha" : "jar";
+    syncVesselSeg();
+  }));
+  $("addPot").addEventListener("click", () => openPot(null));
+  function setPotView(p, v) {
+    if (p.view === v) return;
+    p.view = v;
+    if (p.id === state.cur) { clearGacha(); dropOnHome = v === "gacha"; }   // ホームに戻ったとき、カプセルが上から落ちてくる
+    save(); render();
+    toast(`「${p.name}」を${v === "gacha" ? "ガチャガチャ" : "ビン"}にしました`);
+  }
+  $("splitToggle").addEventListener("change", ev => {
+    if (!ev.target.checked && state.pots.length > 1) {
+      ev.target.checked = true;
+      toast("入れものが2つ以上あるとオフにできません。1つにしてからオフにしてください");
+      return;
+    }
+    state.split = ev.target.checked;
+    save(); render();
+    toast(state.split ? "ホームに入れものの切り替えが出ます。「＋ 入れものを追加」から作れます" : "用途ごとに分けるのをやめました");
+  });
+  $("gDelete").addEventListener("click", () => {
+    const p = potOf(potEditId);
+    if (!p || state.pots.length <= 1) return;
+    const n = potEntries(p).length;
+    if (!confirm(`「${p.name}」を削除します。${n ? `${n}件の記録は消えずに「きろく」と「まとめ」に残ります（どの入れものにも入っていない扱いになります）。` : ""}よろしいですか？`)) return;
+    const prev = JSON.parse(JSON.stringify(state));
+    for (const e of state.entries) if (e.pot === p.id) e.pot = "";
+    state.pots = state.pots.filter(x => x.id !== p.id);
+    if (state.cur === p.id) { state.cur = state.pots[0].id; clearGacha(); instantPaint = true; displayed = null; }
+    save(); render();
+    $("potSheet").close();
+    toast(`「${p.name}」を削除しました`, () => { state = prev; clearGacha(); instantPaint = true; displayed = null; save(); render(); });
+  });
+
+  // =========================================================
+  // データ
+  // =========================================================
+  function download(blob, filename) {
+    const a = h("a", { href: URL.createObjectURL(blob), download: filename });
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  $("exportBtn").addEventListener("click", () => {
+    download(new Blob([JSON.stringify(state, null, 2)], { type: "application/json" }), `tsumori-chokin-${today()}.json`);
+    toast("バックアップを書き出しました");
+  });
+  $("csvBtn").addEventListener("click", () => {
+    // 表計算ソフトで開いたとき、= + - @ で始まる文字が数式として実行されないように ' を前に付ける
+    const q = v => {
+      let s = String(v);
+      if (typeof v === "string" && /^[=+\-@\t\r]/.test(s)) s = "'" + s;
+      return `"${s.replace(/"/g, '""')}"`;
+    };
+    const rows = [["日付", "カテゴリ", "なにが", "金額", "メモ", "入れもの"], ...sorted().map(e => [e.date, catOf(e.category).label, e.name, e.amount, e.memo, potOf(e.pot) ? potOf(e.pot).name : ""])];
+    // Excel で文字化けしないよう BOM を付ける
+    download(new Blob(["﻿" + rows.map(r => r.map(q).join(",")).join("\r\n")], { type: "text/csv" }), `tsumori-chokin-${today()}.csv`);
+    toast("CSVを書き出しました");
+  });
+  $("importFile").addEventListener("change", async ev => {
+    const file = ev.target.files[0];
+    ev.target.value = "";
+    if (!file) return;
+    // 他の人から受け取ったファイルもありうるので、大きさと件数に上限を設ける
+    if (file.size > IMPORT_MAX_BYTES) { toast("ファイルが大きすぎます（5MBまで）"); return; }
+    try {
+      const raw = JSON.parse(await file.text());
+      if (!raw || typeof raw !== "object" || !Array.isArray(raw.entries)) throw new Error("format");
+      if (raw.entries.length > MAX_ENTRIES || (Array.isArray(raw.cats) && raw.cats.length > MAX_CATS)) throw new Error("size");
+      const data = normalize(raw);
+      const catIds = new Set(state.cats.map(c => c.id));
+      // カテゴリの情報を持たない古いバックアップでは、標準カテゴリを足し直さない
+      // （削除したカテゴリが復活しないように）。該当する記録は「そのほか」に入れる
+      if (Array.isArray(raw.cats) && raw.cats.length) {
+        for (const c of data.cats) if (!catIds.has(c.id) && state.cats.length < MAX_CATS) {
+          const i = state.cats.findIndex(x => x.id === "other");
+          state.cats.splice(i < 0 ? state.cats.length : i, 0, c);
+          catIds.add(c.id);
+        }
+      }
+      const have = new Set(state.entries.map(e => e.id));
+      const room = MAX_ENTRIES - state.entries.length;
+      const added = data.entries.filter(e => !have.has(e.id)).slice(0, Math.max(0, room));
+      for (const e of added) if (!catIds.has(e.category)) e.category = "other";
+      const wasEmpty = state.entries.length === 0;
+      state.entries.push(...added);
+      if (wasEmpty && (raw.goal || raw.pots)) { state.pots = data.pots; state.cur = data.cur; }
+      else {
+        // 今ある入れものに無いものは足す（入りきらない分の記録は、いま表示中の入れものへ）
+        for (const p of data.pots) if (!potOf(p.id) && state.pots.length < MAX_POTS && added.some(e => e.pot === p.id)) state.pots.push({ ...p, base: 0, shelf: { n: 0, amount: 0 } });
+      }
+      for (const e of added) if (e.pot && !potOf(e.pot)) e.pot = state.cur;
+      if (state.pots.length > 1) state.split = true;
+      clearGacha(); instantPaint = true;
+      if (!state.achieved.length) state.achieved = data.achieved;
+      displayed = null;
+      save(); render();
+      toast(added.length ? `${added.length}件を読み込みました` : "新しい記録はありませんでした");
+    } catch {
+      toast("読み込めませんでした。つもり貯金で書き出したファイルを選んでください");
+    }
+  });
+  $("wipeBtn").addEventListener("click", () => {
+    if (!state.entries.length) { toast("削除する記録はありません"); return; }
+    if (!confirm(`${state.entries.length}件の記録と目標をすべて削除します。よろしいですか？\n（カテゴリの設定は残ります）`)) return;
+    const prev = JSON.parse(JSON.stringify(state));
+    state = normalize({ cats: state.cats, view: curPot().view, split: state.split });
+    clearGacha(); instantPaint = true;
+    displayed = null;
+    save(); render();
+    toast("すべての記録を削除しました", () => { state = prev; displayed = null; clearGacha(); instantPaint = true; save(); render(); });
+  });
+
+  // =========================================================
+  // 画面切り替え（URL の #home / #history / #stats / #settings）
+  // =========================================================
+  const VIEWS = ["home", "history", "stats", "settings"];
+  let current = "home";
+  let pendingAdd = false;
+  let dropOnHome = false;
+
+  function show(v) {
+    if (!VIEWS.includes(v)) v = "home";
+    current = v;
+    document.querySelectorAll(".view").forEach(s => { s.hidden = s.dataset.view !== v; });
+    document.querySelectorAll(".tab[data-go]").forEach(b => {
+      if (b.dataset.go === v) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+    });
+    if (v === "home" && dropOnHome) { dropOnHome = false; clearGacha(); renderHome(); }
+    if (v === "stats") renderStats();
+    if (pendingAdd && v === "home") {
+      pendingAdd = false;
+      requestAnimationFrame(() => {
+        $("addPanel").scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+        $("name").focus({ preventScroll: true });
+      });
+    } else window.scrollTo(0, 0);
+  }
+  function go(v, focusAdd = false) {
+    pendingAdd = focusAdd;
+    if ((location.hash.slice(1) || "home") === v) show(v); else location.hash = v;
+  }
+  window.addEventListener("hashchange", () => show(location.hash.slice(1)));
+  document.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => go(b.dataset.go)));
+  $("tabAdd").addEventListener("click", () => go("home", true));
+
+  $("q").addEventListener("input", () => { hq = $("q").value; hshown = PAGE; renderHistoryList(); });
+  $("more").addEventListener("click", () => { hshown += PAGE; renderHistoryList(); });
+  $("calPrev").addEventListener("click", () => {
+    const [y, m] = calMonth.split("-").map(Number);
+    calMonth = ymd(new Date(y, m - 2, 1)).slice(0, 7); calDay = null; renderCalendar();
+  });
+  $("calNext").addEventListener("click", () => {
+    const [y, m] = calMonth.split("-").map(Number);
+    calMonth = ymd(new Date(y, m, 1)).slice(0, 7); calDay = null; renderCalendar();
+  });
+  document.querySelectorAll("[data-theme-val]").forEach(b => b.addEventListener("click", () => applyTheme(b.dataset.themeVal)));
+
+  // ホームの入れものを左右スワイプで切り替える
+  let swipe = null;
+  document.querySelector(".hero").addEventListener("pointerdown", ev => {
+    if (ev.pointerType === "mouse" || ev.target.closest(".pots")) return;
+    swipe = { x: ev.clientX, y: ev.clientY };
+  });
+  document.querySelector(".hero").addEventListener("pointerup", ev => {
+    if (!swipe) return;
+    const dx = ev.clientX - swipe.x, dy = ev.clientY - swipe.y;
+    swipe = null;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) stepPot(dx < 0 ? 1 : -1);
+  });
+  document.querySelector(".hero").addEventListener("pointercancel", () => { swipe = null; });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", syncThemeColor);
+  ["amount", "eAmount", "gAmount", "cPreset"].forEach(id => bindAmount($(id)));
+
+  // 日付が変わったまま開きっぱなしでも「今日」がずれないように
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    if (!$("date").value) $("date").value = today();
+    syncDateChips(); renderHome();
+  });
+
+  // =========================================================
+  // 起動
+  // =========================================================
+  let theme = "auto";
+  try { theme = localStorage.getItem(THEME_KEY) || "auto"; } catch {}
+  applyTheme(theme);
+  buildOshiPick();
+  try { applyOshi(localStorage.getItem(OSHI_KEY), false); } catch { applyOshi(null, false); }
+  $("date").value = today();
+  syncDateChips();
+  setAmount($("amount"), catOf(selected).preset);
+  $("liquid").style.transition = "none";      // 初回は液面アニメなしで表示
+  render();
+  requestAnimationFrame(() => requestAnimationFrame(() => { $("liquid").style.transition = ""; }));
+  show(location.hash.slice(1) || "home");
+
+  // =========================================================
+  // オフライン対応（公開版だけ。ビルドが OFFLINE を true にする）
+  // 一度開けば、アプリ一式が端末に保存され、機内モードでも動く
+  // =========================================================
+  const OFFLINE = false;
+  if (OFFLINE) {
+    const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+    $("installNote").hidden = standalone;
+    // ブラウザの容量整理で記録が消されないよう、保存の継続をお願いしておく
+    try { navigator.storage && navigator.storage.persist && navigator.storage.persist().catch(() => {}); } catch {}
+  }
+  if (OFFLINE && "serviceWorker" in navigator && window.isSecureContext) {
+    // updateViaCache: "none" … ブラウザが自動で行う sw.js の確認（開いたとき。数百バイトの「変更なし」の返事だけ）を
+    // 毎回公開先に問い合わせる。sw.js の不具合を直したとき、次に開いた時点で届くようにするため。
+    // アプリ本体の更新は、これとは別に「更新する」を押したときだけ
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => {});
+
+    // Service Worker への依頼。ボタンを押したときだけ呼ぶ
+    const ask = type => navigator.serviceWorker.ready.then(reg => new Promise((resolve, reject) => {
+      const sw = navigator.serviceWorker.controller || reg.active;
+      if (!sw) { reject(new Error("no worker")); return; }
+      const ch = new MessageChannel();
+      const timer = setTimeout(() => reject(new Error("timeout")), 120000);
+      ch.port1.onmessage = e => { clearTimeout(timer); e.data && e.data.ok ? resolve(e.data) : reject(new Error(e.data && e.data.error)); };
+      sw.postMessage({ type }, [ch.port2]);
+    }));
+    const msg = t => { $("updMsg").textContent = t; };
+    const SNAP_KEY = "tsumori-chokin-snapshot";       // 更新する直前の記録の控え（前の版に戻すときに使う）
+    let prevVer = null;
+    $("updateBox").hidden = false;
+    const showVersions = () => ask("version").then(d => {
+      $("updVer").textContent = d.current ? `いまの版：${d.current}` : "";
+      prevVer = d.prev || null;                        // 古い sw.js のままの端末では返ってこない → ボタンを出さない
+      $("updBackWrap").hidden = !prevVer;
+      $("updBack").textContent = prevVer ? `前の版（${prevVer}）に戻す` : "前の版に戻す";
+    }).catch(() => {});
+    showVersions();
+
+    // 今の版より新しい更新内容を並べる（公開先の文字は textContent で入れる）
+    const showNotes = notes => {
+      const box = $("updNotes");
+      box.hidden = !notes || !notes.length;
+      if (box.hidden) return;
+      box.replaceChildren(h("h4", null, "この更新で変わること"), ...notes.map(n => [
+        notes.length > 1 ? h("h4", null, n.date) : null,
+        h("ul", null, n.items.map(t => h("li", null, t))),
+      ]).flat().filter(Boolean));
+    };
+
+    $("updCheck").addEventListener("click", async () => {
+      $("updCheck").disabled = true; $("updApply").hidden = true; showNotes(null);
+      msg("確認しています…");
+      try {
+        const d = await ask("check");
+        if (d.latest && d.latest !== d.current) {
+          msg(`新しい版があります（${d.latest}）。内容を見て、よければ「更新する」を押してください（約3MB）。更新しても、あとで前の版に戻せます。`);
+          showNotes(d.notes);
+          $("updApply").hidden = false;
+        } else msg("最新の版です");
+      } catch { msg("確認できませんでした。電波のあるところで、もう一度お試しください"); }
+      $("updCheck").disabled = false;
+    });
+    $("updApply").addEventListener("click", async () => {
+      // 更新する直前の記録を控えておく（新しい版で記録の形が変わっても、前の版に戻すときに元どおりにできる）
+      let cur = null;
+      try { cur = (await ask("version")).current; } catch {}
+      try {
+        localStorage.setItem(SNAP_KEY, JSON.stringify({ ver: cur, at: Date.now(), data: localStorage.getItem(KEY) }));
+      } catch {
+        if (!confirm("記録の控えを取れませんでした（端末の空きが足りません）。控えなしで更新すると、前の版に戻したときに記録が元どおりにならないことがあります。更新しますか？")) return;
+      }
+      $("updApply").disabled = true; $("updCheck").disabled = true;
+      msg("ダウンロードしています…");
+      try {
+        const d = await ask("apply");
+        msg(d.updated ? "更新しました。読み込み直します…" : "最新の版です");
+        if (d.updated) setTimeout(() => location.reload(), 600);
+      } catch { msg("更新できませんでした。いまの版のまま使えます"); }
+      $("updApply").disabled = false; $("updCheck").disabled = false;
+    });
+    $("updBack").addEventListener("click", async () => {
+      if (!prevVer) return;
+      let snap = null;
+      try { snap = JSON.parse(localStorage.getItem(SNAP_KEY)); } catch {}
+      const cur = localStorage.getItem(KEY);
+      const restore = snap && snap.ver === prevVer && "data" in snap;
+      const changed = restore && snap.data !== cur;
+      const text = !restore
+        ? `前の版（${prevVer}）に戻します。更新する前の記録の控えが無いので、記録は今のまま使います（前の版で読めない部分があるかもしれません）。戻しますか？`
+        : changed
+          ? `前の版（${prevVer}）に戻します。記録は更新する直前（${new Date(snap.at).toLocaleString("ja-JP")}）の状態に戻り、そのあとに付けた記録や変更は消えます。残したいときは、先に「バックアップを書き出す」を押してください。戻しますか？`
+          : `前の版（${prevVer}）に戻します。戻しますか？`;
+      if (!confirm(text)) return;
+      $("updBack").disabled = true;
+      msg("前の版に戻しています…");
+      try {
+        await ask("rollback");
+        if (changed) { if (snap.data == null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, snap.data); }
+        msg("前の版に戻しました。読み込み直します…");
+        setTimeout(() => location.reload(), 600);
+      } catch { msg("戻せませんでした。いまの版のまま使えます"); $("updBack").disabled = false; }
+    });
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+# ビルドで作り直せる公開用ファイル（python tools/build.py）
+dist/
+
+__pycache__/
+*.pyc

@@ -1,0 +1,5 @@
+# 改行は LF に揃える（ビルドが index.html の中身から CSP のハッシュを作るため、改行が変わると版番号も変わる）
+* text=auto eol=lf
+*.ttf binary
+*.woff2 binary
+*.png binary
