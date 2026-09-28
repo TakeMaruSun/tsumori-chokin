@@ -7,6 +7,15 @@
 
 👉 https://oshi-tsumori.pages.dev/
 
+<p>
+  <img src="docs/images/1-home-bin.png" width="200" alt="ホーム：記録するほどビンの中身が増えていく">
+  <img src="docs/images/2-home-gacha.png" width="200" alt="ガチャガチャ：記録がカプセルになって積もる。推しカラーは紫、ダークモード">
+  <img src="docs/images/3-stats.png" width="200" alt="まとめ：月ごとの推移とカテゴリ別">
+  <img src="docs/images/4-history.png" width="200" alt="きろく：チケットの半券のような記録の一覧">
+</p>
+
+※ 画面の記録は見本です。
+
 ## 使いかた
 
 1. スマホで上の URL を開く
